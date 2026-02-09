@@ -1,5 +1,8 @@
 # Package startup -----
 
+#' @import data.table
+NULL
+
 utils::globalVariables(c(
   ".",
   ".N",
@@ -71,7 +74,10 @@ utils::globalVariables(c(
   "V1",
   "i",
   "j",
-  "x"
+  "x",
+  "variazione",
+  "annunci",
+  ".skill"
 ))
 
 .onLoad <- function(libname, pkgname) {
