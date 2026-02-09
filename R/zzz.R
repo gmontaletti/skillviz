@@ -1,6 +1,8 @@
 # Package startup -----
 
 #' @import data.table
+#' @importFrom stats median xtabs
+#' @importFrom utils head
 NULL
 
 utils::globalVariables(c(
@@ -77,7 +79,9 @@ utils::globalVariables(c(
   "x",
   "variazione",
   "annunci",
-  ".skill"
+  ".skill",
+  ".data",
+  "tot"
 ))
 
 .onLoad <- function(libname, pkgname) {
