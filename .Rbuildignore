@@ -6,3 +6,8 @@
 ^renv$
 ^renv\.lock$
 ^\.Rprofile$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.github$
+^README\.md$

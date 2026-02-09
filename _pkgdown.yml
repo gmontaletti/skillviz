@@ -1,0 +1,102 @@
+url: https://gmontaletti.github.io/skillviz/
+
+template:
+  bootstrap: 5
+
+navbar:
+  structure:
+    left:  [intro, reference, articles]
+    right: [search, github]
+  components:
+    github:
+      icon: fa-github
+      href: https://github.com/gmontaletti/skillviz
+
+articles:
+  - title: Getting Started
+    contents:
+      - skillviz-quickstart
+  - title: In-Depth
+    contents:
+      - skillviz-guide
+
+reference:
+  - title: Data Loading and Deduplication
+    desc: Functions for reading OJA data, ESCO mappings, and deduplicating announcements.
+    contents:
+      - read_esco_mapping
+      - read_isco_groups
+      - deduplicate_annunci
+
+  - title: Classification Crosswalks
+    desc: Build crosswalk tables between CPI, ESCO, and CP2021 classifications.
+    contents:
+      - build_cpi_esco_crosswalk
+      - prepare_annunci_esco
+      - prepare_annunci_geography
+
+  - title: Skill Relevance Analysis
+    desc: Compute specialization indices, TF-IDF diffusion scores, and skill classification.
+    contents:
+      - compute_balassa_index
+      - compute_skill_diffusion
+      - build_skillist
+      - compute_idf_classification
+
+  - title: Co-occurrence Networks
+    desc: Build and filter skill co-occurrence matrices and networks.
+    contents:
+      - compute_cooc_matrix
+      - filter_relative_risk
+      - cooc_all_professions
+
+  - title: Community Detection
+    desc: Identify skill communities within co-occurrence networks.
+    contents:
+      - detect_skill_communities
+
+  - title: Professional Distance and Clustering
+    desc: Compute pairwise profession distances and hierarchical clustering.
+    contents:
+      - compute_profession_distance
+      - cluster_professions
+
+  - title: Salary Analysis
+    desc: Extract and aggregate salary data by period and skill.
+    contents:
+      - extract_salary_data
+      - compute_salary_by_period
+      - compute_salary_by_skill
+
+  - title: Source Stability
+    desc: Assess and filter OJA data sources by time-series stability.
+    contents:
+      - prepare_source_tsibble
+      - compute_source_features
+      - filter_stable_sources
+      - filter_annunci_by_source
+
+  - title: Temporal Analysis
+    desc: Track skill ranking evolution and rank variation over time.
+    contents:
+      - compute_skill_ranking_series
+      - compute_skill_variation
+
+  - title: Skill Extraction
+    desc: Extract profession-specific skills and build skill profiles.
+    contents:
+      - extract_specific_skills_cpi3
+      - build_profession_skill_profile
+
+  - title: Visualization
+    desc: Plot co-occurrence networks and skill ranking series.
+    contents:
+      - plot_cooc_graph
+      - plot_skill_ranking
+
+  - title: Datasets
+    desc: Pre-computed datasets included with the package.
+    contents:
+      - isco_gruppi
+      - skillist
+      - cooccorrenza

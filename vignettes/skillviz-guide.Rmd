@@ -1,0 +1,908 @@
+---
+title: "Comprehensive Guide to skillviz"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Comprehensive Guide to skillviz}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+## Introduction
+
+**skillviz** is an R package for analyzing skill requirements from Online Job
+Advertising (OJA) data. It provides a coherent set of functions for computing
+skill specialization indices, co-occurrence networks, source stability
+filtering, salary analysis, professional distance clustering, and temporal
+skill ranking.
+
+The package is built around two classification systems:
+
+- **ESCO** (European Skills, Competences, Qualifications and Occupations) --
+  the European multilingual taxonomy that classifies occupations (ISCO-based)
+  and skills in a hierarchical structure.
+- **CP2021** (Classificazione delle Professioni 2021) -- the Italian national
+  professional classification maintained by ISTAT, structured at multiple
+  digit levels (e.g., 3-digit groups).
+
+The analytical framework follows a pipeline approach: raw OJA records are
+loaded, deduplicated, enriched with profession and skill labels through
+crosswalk tables, and then processed through a series of quantitative modules
+-- from skill relevance computation to network analysis and temporal tracking.
+
+All core functions use `data.table` for data manipulation. Optional
+visualization and time-series features depend on suggested packages (ggplot2,
+ggraph, tsibble, etc.) that are checked at runtime.
+
+```{r setup}
+library(skillviz)
+library(data.table)
+```
+
+
+## Data Preparation
+
+The first step in any skillviz workflow is loading and cleaning the raw OJA
+data. The package provides three functions for this purpose.
+
+### read_esco_mapping()
+
+Reads the CPI-to-ESCO level 4 mapping table from either a database connection
+or an `.fst` file on disk. This mapping is used to link job announcements
+(coded in ESCO) to the Italian professional classification.
+
+```{r}
+# 1. read from fst file -----
+esco_mapping <- read_esco_mapping(file = "path/to/mappa_cpv_esco_iv.fst")
+
+# 2. read from database -----
+# conn <- DBI::dbConnect(RPostgres::Postgres(), ...)
+# esco_mapping <- read_esco_mapping(conn = conn)
+```
+
+The returned `data.table` contains at least these columns:
+
+| Column | Description |
+|--------|-------------|
+| `idesco_level_4` | ESCO level 4 occupation code |
+| `esco_level_4` | ESCO level 4 occupation label (Italian) |
+| `idcp_2011_v` | CP2011 code (used to derive `cod_3`) |
+
+### read_isco_groups()
+
+Reads the `ISCOGroups*.csv` file from an ESCO classification dataset directory.
+This provides the hierarchical occupation structure.
+
+```{r}
+isco <- read_isco_groups("path/to/ESCO dataset - v1.1.1 - classification - it - csv")
+```
+
+The result is a `data.table` with columns including `code` and
+`preferredLabel`.
+
+### deduplicate_annunci()
+
+Job announcements in OJA databases often contain duplicate rows per
+`general_id`. This function collapses duplicates by keeping modal values for
+categorical columns (via `collapse::fmode()`) and computing an activity flag.
+
+```{r}
+# 1. synthetic announcement data -----
+ann_raw <- data.table(
+  general_id   = c(1, 1, 2, 2, 2, 3),
+  idcity       = c(101, 101, 202, 202, 203, 101),
+  idesco_level_4 = c("E001", "E001", "E002", "E002", "E002", "E001"),
+  xdata        = as.IDate(c("2024-01-15", "2024-01-16", "2024-06-01",
+                             "2024-06-02", "2024-06-03", "2024-12-01"))
+)
+
+# 2. deduplicate -----
+ann_dedup <- deduplicate_annunci(ann_raw, active_date = as.IDate("2024-11-01"))
+```
+
+**Output columns:** `general_id`, `N` (original row count), `idcity` (modal),
+`idesco_level_4` (modal), `attivo` (1 if any row is active, 0 otherwise).
+
+
+## Classification Crosswalks
+
+Once the mapping data is loaded, these functions link ESCO occupation codes to
+CP2021 profession groups and enrich announcements with geographic information.
+
+### build_cpi_esco_crosswalk()
+
+Merges the ESCO mapping with CP2021 level 3 classification to produce a
+lookup table mapping each `idesco_level_4` to its Italian ESCO label and
+CP2021 3-digit group.
+
+```{r}
+# 1. synthetic inputs -----
+esco_mapping <- data.table(
+  idesco_level_4 = c("E001", "E002", "E003"),
+  esco_level_4   = c("Software developer", "Data analyst", "System admin"),
+  idcp_2011_v    = c("2.1.1.4.1", "2.1.1.5.2", "2.1.1.4.3")
+)
+
+cpi3 <- data.table(
+  cod_3  = c("2.1.1", "2.1.2"),
+  nome_3 = c("ICT specialists", "Engineering technicians")
+)
+
+# 2. build crosswalk -----
+crosswalk <- build_cpi_esco_crosswalk(esco_mapping, cpi3)
+```
+
+**Output columns:** `idesco_level_4`, `it_esco_level_4` (collapsed Italian
+labels), `cod_3`, `nome_3`.
+
+### prepare_annunci_esco()
+
+Joins announcements with the ESCO mapping to add Italian profession labels and
+parses year/month/day columns into proper `IDate` fields.
+
+```{r}
+# 1. synthetic announcement data -----
+ann <- data.table(
+  general_id       = c(1, 2, 3),
+  idesco_level_4   = c("E001", "E002", "E001"),
+  year_grab_date   = c(2024L, 2024L, 2024L),
+  month_grab_date  = c(1L, 3L, 6L),
+  day_grab_date    = c(15L, 10L, 20L),
+  year_expire_date = c(2024L, 2024L, 2024L),
+  month_expire_date = c(2L, 4L, 7L),
+  day_expire_date  = c(15L, 10L, 20L)
+)
+
+# 2. prepare -----
+ann_esco <- prepare_annunci_esco(ann, esco_mapping)
+```
+
+**Output columns:** `general_id`, `gdate` (grab date as IDate), `idesco_level_4`,
+`it_esco_level_4`.
+
+### prepare_annunci_geography()
+
+Merges announcements with both ESCO labels and a territorial mapping table to
+add the CPI (Centro per l'Impiego) dimension, then aggregates unique
+announcement counts by CPI, profession, and year.
+
+```{r}
+# 1. territorial table -----
+territoriale <- data.table(
+  COD_ISTAT       = c(101L, 202L, 303L),
+  CPI             = c("CPI Trento", "CPI Rovereto", "CPI Riva"),
+  COD_REGIONE_PAUT = c(10L, 10L, 10L)
+)
+
+# 2. prepare with geographic dimension -----
+ann_geo <- prepare_annunci_geography(
+  ann, esco_mapping, territoriale, regione = 10L
+)
+```
+
+**Output columns:** `CPI`, `it_esco_level_4`, `year_grab_date`, `N`.
+
+
+## Skill Relevance Analysis
+
+This module provides methods for measuring how relevant or specific a skill is
+to a given profession. The core concepts are the Balassa index (Revealed
+Comparative Advantage) and TF-IDF-based diffusion classification.
+
+### compute_balassa_index()
+
+The **Balassa index** (also known as Revealed Comparative Advantage, RCA) is a
+standard measure from international trade economics, adapted here to skill
+analysis. For a profession-skill pair, the index computes:
+
+$$B = \frac{N_{skill,prof} / N_{prof}}{N_{skill,all} / N_{all}}$$
+
+A value of B >= 1 indicates the skill is over-represented in that profession
+relative to its overall frequency -- i.e., the skill is "specific" to the
+profession.
+
+```{r}
+# 1. synthetic skill occurrence data -----
+skills <- data.table(
+  preferredLabel    = c(rep("Software developer", 5),
+                        rep("Data analyst", 4),
+                        rep("Software developer", 3)),
+  escoskill_level_3 = c("Python", "Java", "SQL", "Docker", "Git",
+                        "Python", "SQL", "Statistics", "Excel",
+                        "Python", "Java", "Docker")
+)
+
+# 2. compute Balassa index -----
+balassa <- compute_balassa_index(skills)
+```
+
+**Output columns:** `preferredLabel`, `escoskill_level_3`, `N`,
+`tutte_professioni`, `tutte_le_skills_della_professione`,
+`tutte_le_ricorrenze`, `balassa_index`, `specializzazione` ("specifica" if
+B >= 1, "non specifica" otherwise).
+
+### compute_skill_diffusion()
+
+This function applies a **TF-IDF** (Term Frequency - Inverse Document
+Frequency) approach to classify skills by their diffusion level. TF measures
+how frequently a skill appears relative to total occurrences; IDF penalizes
+skills that appear everywhere by computing `log(N_total / N_skill)`.
+
+Skills with very low IDF (bottom quantile) are classified as "alta" (highly
+diffuse/generic), while those with very high IDF (top quantile) are "minima"
+(rare/niche).
+
+```{r}
+# 1. aggregated skill frequencies -----
+skills_agg <- data.table(
+  escoskill_level_3 = c("Python", "Java", "SQL", "Docker",
+                        "Statistics", "Excel", "Git"),
+  N                 = c(500L, 300L, 800L, 150L, 200L, 700L, 100L)
+)
+
+# 2. compute diffusion -----
+diffusion <- compute_skill_diffusion(skills_agg, quantile_trim = 0.025)
+```
+
+**Output columns:** `escoskill_level_3`, `N`, `tf`, `idf`, `diffusione`
+("alta", "centrale", or "minima").
+
+### build_skillist()
+
+Builds a master skills list by merging skill metadata (reuse type, domain
+flags) with diffusion scores. The ESCO reuse type labels are translated to
+Italian (`settoriale`, `trasversale`, `specifico`, `multisettoriale`).
+
+```{r}
+# 1. skill metadata -----
+skill_meta <- data.table(
+  escoskill_level_3     = c("Python", "Python", "SQL", "SQL"),
+  esco_v0101_reusetype  = c("sector-specific", "sector-specific",
+                            "transversal", "transversal"),
+  pillar_softskills     = c(0L, 0L, 0L, 0L),
+  esco_v0101_ict        = c(1L, 1L, 1L, 1L),
+  esco_v0101_green      = c(0L, 0L, 0L, 0L),
+  esco_v0101_language   = c(0L, 0L, 0L, 0L)
+)
+
+# 2. build master list -----
+master_skills <- build_skillist(skill_meta, diffusion)
+```
+
+**Output columns:** `escoskill_level_3`, `N`, `tf`, `idf`, `diffusione`,
+`esco_v0101_reusetype`, `pillar_softskills`, `esco_v0101_ict`,
+`esco_v0101_green`, `esco_v0101_language`, `tipo`.
+
+### compute_idf_classification()
+
+A variant of diffusion analysis that operates at the **document level**. Instead
+of using aggregated counts, it computes IDF based on the number of distinct
+announcements (documents) mentioning each skill:
+
+$$IDF = \log\left(\frac{N_{docs\_total}}{N_{docs\_with\_skill}}\right)$$
+
+This is more robust to situations where a single announcement might list the
+same skill multiple times.
+
+```{r}
+# 1. document-level skill data -----
+skills_merged <- data.table(
+  general_id        = c(1, 1, 1, 2, 2, 3, 3, 3, 3),
+  escoskill_level_3 = c("Python", "SQL", "Docker",
+                        "Python", "SQL",
+                        "Python", "Java", "SQL", "Git")
+)
+
+# 2. compute IDF classification -----
+idf_result <- compute_idf_classification(skills_merged, quantile_trim = 0.025)
+
+# 3. access components -----
+idf_result$idf            # data.table with IDF scores
+idf_result$threshold_rows # number of highly diffuse skills
+idf_result$diffuse_skills # character vector of "alta" skills
+```
+
+
+## Co-occurrence Networks
+
+Co-occurrence analysis identifies which skills tend to appear together in the
+same job announcements. This module provides functions for building
+co-occurrence matrices and filtering them to retain statistically meaningful
+associations.
+
+### compute_cooc_matrix()
+
+Builds a sparse symmetric skill co-occurrence matrix using a term-document
+matrix approach. The entry (i, j) counts how many announcements mention both
+skill i and skill j.
+
+```{r}
+# 1. skill assignment data -----
+skills <- data.table(
+  general_id        = c(1, 1, 1, 2, 2, 3, 3, 3),
+  escoskill_level_3 = c("Python", "SQL", "Docker",
+                        "Python", "SQL",
+                        "Python", "Java", "SQL")
+)
+
+# 2. build co-occurrence matrix -----
+cooc_mat <- compute_cooc_matrix(skills)
+```
+
+The result is a symmetric sparse matrix of class `dgCMatrix` with skill names
+as row/column names.
+
+### filter_relative_risk()
+
+The raw co-occurrence matrix includes both meaningful and spurious associations.
+**Relative risk** filtering retains only edges where the observed co-occurrence
+exceeds the expected frequency under independence:
+
+$$RR = \frac{O_{ij}}{E_{ij}} = \frac{O_{ij} \times N_{total}}{N_i \times N_j}$$
+
+Only pairs with RR > 1 (observed count exceeds the independence baseline) are
+kept.
+
+```{r}
+# 1. filter by relative risk -----
+rr_edges <- filter_relative_risk(cooc_mat)
+```
+
+**Output columns:** `from`, `to`, `weight`, sorted by descending weight.
+
+### cooc_all_professions()
+
+Computes per-profession co-occurrence networks by iterating over each
+profession, building a sparse term-document matrix, extracting co-occurrence
+edges, and retaining the largest connected component. Results are combined into
+a single `data.table`.
+
+Internally, this function uses `.cooc_single()` which:
+
+1. Filters data to a single profession.
+2. Builds a sparse term-document matrix via `xtabs()`.
+3. Computes co-occurrence via `Matrix::crossprod()`.
+4. Applies a minimum weight threshold.
+5. Retains the top-N edges and largest connected component.
+
+```{r}
+# 1. skill data with profession labels -----
+skills <- data.table(
+  general_id        = rep(1:30, each = 3),
+  escoskill_level_3 = sample(c("Python", "SQL", "Docker", "Java", "Git"),
+                             90, replace = TRUE),
+  preferredLabel    = rep(c("Developer", "Analyst"), each = 45)
+)
+
+# 2. compute co-occurrence for all professions -----
+cooc_all <- cooc_all_professions(
+  skills,
+  top_n = 20L,
+  min_weight = 2L
+)
+
+# 3. compute for specific professions only -----
+cooc_dev <- cooc_all_professions(
+  skills,
+  professions = "Developer",
+  top_n = 20L,
+  min_weight = 2L
+)
+```
+
+**Output columns:** `professione`, `from`, `to`, `weight`.
+
+
+## Community Detection
+
+Once a co-occurrence network is built, community detection algorithms can
+identify groups of skills that cluster together. The package supports four
+methods from the igraph library.
+
+### detect_skill_communities()
+
+Takes a co-occurrence edge list and applies a community detection algorithm.
+The supported methods are:
+
+| Method | Algorithm | Description |
+|--------|-----------|-------------|
+| `"infomap"` | Information-theoretic | Minimizes the description length of a random walk (default) |
+| `"label_prop"` | Label propagation | Fast, non-deterministic propagation of labels |
+| `"walktrap"` | Random walks | Uses short random walks to identify communities |
+| `"spinglass"` | Statistical mechanics | Spin-glass model, suitable for smaller graphs |
+
+```{r}
+# 1. co-occurrence edge list -----
+cooc_edges <- data.table(
+  from   = c("Python", "Python", "SQL", "Java", "Docker", "Docker"),
+  to     = c("SQL", "Docker", "Docker", "Maven", "Kubernetes", "Linux"),
+  weight = c(150, 80, 60, 45, 90, 70)
+)
+
+# 2. detect communities -----
+result <- detect_skill_communities(cooc_edges, method = "infomap")
+
+# 3. access components -----
+result$graph        # igraph object
+result$communities  # community detection result
+result$membership   # named integer vector: skill -> community ID
+```
+
+The `membership` vector can be used to color nodes in network visualizations or
+to group skills into functional clusters for reporting.
+
+
+## Professional Distance and Clustering
+
+These functions measure how similar or different professions are based on their
+skill profiles, and group them into clusters.
+
+### compute_profession_distance()
+
+Builds a profession-by-skill incidence matrix and computes pairwise distances
+between professions. The optional Balassa (RCA) filter zeros out cells where
+the observed skill count is below expected, retaining only skills that are
+over-represented in a profession.
+
+```{r}
+# 1. profession-skill data -----
+competenze <- data.table(
+  cod_3             = c("2.1.1", "2.1.1", "2.1.1", "2.1.2", "2.1.2", "2.1.2"),
+  escoskill_level_3 = c("Python", "SQL", "Docker", "Python", "SQL", "Statistics")
+)
+
+# 2. compute distance -----
+dist_mat <- compute_profession_distance(competenze, method = "binary")
+```
+
+The default `"binary"` method treats the filtered matrix as presence/absence
+and computes Jaccard-like distances. Other methods supported by `stats::dist()`
+(e.g., `"euclidean"`, `"canberra"`) can also be used.
+
+### cluster_professions()
+
+A wrapper around `stats::hclust()` that performs hierarchical clustering of the
+profession distance matrix. The resulting dendrogram can be plotted or cut into
+groups with `stats::cutree()`.
+
+```{r}
+# 1. hierarchical clustering -----
+hc <- cluster_professions(dist_mat, method = "ward.D2")
+
+# 2. plot dendrogram -----
+plot(hc, main = "Profession clusters", xlab = "", sub = "")
+
+# 3. cut into k groups -----
+groups <- cutree(hc, k = 3)
+```
+
+
+## Salary Analysis
+
+This module extracts and summarizes salary information from job announcements.
+
+### extract_salary_data()
+
+Filters announcements to those with a positive `salaryvalue`.
+
+```{r}
+# 1. announcement data with salary -----
+ann_salary <- data.table(
+  general_id  = 1:5,
+  salaryvalue = c(35000, 0, 42000, 0, 55000),
+  salary      = c("30000-40000", NA, "40000-45000", NA, "50000-60000"),
+  data        = as.IDate(c("2024-01-15", "2024-02-10", "2024-03-20",
+                           "2024-04-05", "2024-05-12"))
+)
+
+# 2. extract rows with salary -----
+sal <- extract_salary_data(ann_salary)
+```
+
+### compute_salary_by_period()
+
+Aggregates salary statistics (count, mean, median) by grouping columns. When
+`"mese"` is included in the grouping and does not exist in the data, it is
+derived from the `data` column as a `"YYYY-MM"` string.
+
+```{r}
+# 1. compute by salary band and month -----
+sal_period <- compute_salary_by_period(sal, by = c("salary", "mese"))
+```
+
+**Output columns:** the `by` columns plus `N`, `media` (mean), `mediana`
+(median).
+
+### compute_salary_by_skill()
+
+Joins salary data with a skills table and computes the median salary for each
+ESCO level 3 skill.
+
+```{r}
+# 1. skills table -----
+skills <- data.table(
+  general_id        = c(1, 1, 3, 3, 5),
+  escoskill_level_3 = c("Python", "SQL", "Python", "Docker", "SQL")
+)
+
+# 2. median salary per skill -----
+sal_skill <- compute_salary_by_skill(sal, skills)
+```
+
+**Output columns:** `escoskill_level_3`, `N`, `mediana` (median salary),
+sorted by descending median.
+
+
+## Source Stability Filtering
+
+OJA data is collected from multiple online sources, each with different
+coverage patterns. This module identifies and filters to sources with stable
+temporal behavior, reducing bias from intermittent or unreliable sources.
+
+The pipeline involves four steps:
+
+### prepare_source_tsibble()
+
+Converts announcement data into a `tsibble` keyed by data source (`fonte`)
+and indexed by year-month, counting unique announcements per source per month.
+
+```{r}
+# 1. announcement data with source -----
+ann <- data.table(
+  general_id      = 1:100,
+  source          = sample(c("Indeed", "LinkedIn", "Monster"), 100, replace = TRUE),
+  gdate           = as.IDate(sample(seq(as.IDate("2023-01-01"),
+                                        as.IDate("2024-12-31"),
+                                        by = "day"), 100))
+)
+
+# 2. prepare tsibble -----
+tst <- prepare_source_tsibble(ann)
+```
+
+### compute_source_features()
+
+Extracts time-series features from the tsibble using STL decomposition
+(via `feasts::feat_stl()`). Returns mean, standard deviation, total count,
+trend/seasonality strength, and coefficient of variation (CV = sd / mean).
+
+```{r}
+# 1. compute features -----
+features <- compute_source_features(tst)
+```
+
+### filter_stable_sources()
+
+Selects sources whose coefficient of variation does not exceed a threshold and
+whose total count meets a minimum. Lower CV indicates more consistent
+publishing patterns.
+
+```{r}
+# 1. filter -----
+stable <- filter_stable_sources(features, cv_threshold = 0.6, min_total = 100L)
+```
+
+The result is a character vector of stable source names.
+
+### filter_annunci_by_source()
+
+Subsets announcements to keep only rows from stable sources.
+
+```{r}
+# 1. filter announcements -----
+ann_stable <- filter_annunci_by_source(ann, stable)
+```
+
+
+## Temporal Analysis
+
+This module tracks how skill demand evolves over time by computing skill
+rankings within professions at each time period.
+
+### compute_skill_ranking_series()
+
+Aggregates skill counts by profession and time period (e.g., year, quarter,
+month), then ranks skills within each profession-period combination in
+descending order of count.
+
+```{r}
+# 1. skill-profession-date data -----
+competenze <- data.table(
+  escoskill_level_3 = c("Python", "SQL", "Docker", "Python", "SQL",
+                        "Python", "Java", "SQL", "Docker", "Git"),
+  nome_3            = rep("ICT specialists", 10),
+  gdate             = as.IDate(c(rep("2023-03-15", 5), rep("2024-06-20", 5)))
+)
+
+# 2. compute annual ranking -----
+serie <- compute_skill_ranking_series(
+  competenze,
+  time_unit = "year",
+  cutoff_date = "2025-01-01"
+)
+```
+
+**Output columns:** `professione`, `mese` (floored date), `skill`, `N`
+(count), `rango` (rank, 1 = most frequent).
+
+### compute_skill_variation()
+
+Computes year-over-year (or period-over-period) changes in skill rankings.
+The variation is calculated as `previous_rank - current_rank`, so positive
+values indicate improvement (the skill moved to a higher rank).
+
+```{r}
+# 1. compute variation -----
+variation <- compute_skill_variation(
+  serie,
+  min_n  = 2L,    # minimum count in current period
+  top_k  = 5L     # top skills per profession
+)
+```
+
+**Output:** A wide-format `data.table` with one row per profession-skill pair,
+rank and count columns for each period (`rango_<period>`, `N_<period>`), and
+`variazione` (rank change).
+
+
+## Skill Extraction
+
+These functions combine the crosswalk, IDF classification, and merge logic
+into higher-level extraction pipelines.
+
+### extract_specific_skills_cpi3()
+
+Extracts non-diffuse (specific) skills at the CP2021 3-digit profession level.
+The pipeline:
+
+1. Merges announcements with the CPI-ESCO crosswalk on `idesco_level_4`.
+2. Merges with skills on `general_id`.
+3. Computes document-level IDF classification.
+4. Filters out highly diffuse skills, retaining only "specifiche" (specific)
+   skills.
+
+```{r}
+# 1. synthetic data -----
+ann <- data.table(
+  general_id     = c(1, 2, 3, 4, 5),
+  idesco_level_4 = c("E001", "E001", "E002", "E002", "E001")
+)
+
+ski <- data.table(
+  general_id        = c(1, 1, 2, 2, 3, 3, 4, 5, 5),
+  escoskill_level_3 = c("Python", "SQL", "Python", "Docker",
+                        "SQL", "Statistics", "SQL", "Python", "Java")
+)
+
+cpi_esco <- data.table(
+  idesco_level_4 = c("E001", "E002"),
+  cod_3          = c("2.1.1", "2.1.2"),
+  nome_3         = c("ICT specialists", "Engineering technicians")
+)
+
+# 2. extract specific skills -----
+specific <- extract_specific_skills_cpi3(ann, ski, cpi_esco, quantile_trim = 0.025)
+```
+
+**Output columns:** `general_id`, `escoskill_level_3`, `cod_3`, `nome_3`.
+
+### build_profession_skill_profile()
+
+Builds a comprehensive profession-skill profile table by joining announcements,
+skills, ISCO classification, and the master skills list. Aggregates to the
+profession-skill level with unique announcement counts.
+
+```{r}
+# 1. inputs -----
+ann <- data.table(
+  general_id     = 1:4,
+  idesco_level_4 = c("E001", "E001", "E002", "E002"),
+  gdate          = as.IDate(c("2024-01-01", "2024-02-01",
+                              "2024-03-01", "2024-04-01")),
+  edate          = as.IDate(c("2024-02-01", "2024-03-01",
+                              "2024-04-01", "2024-05-01"))
+)
+
+ski <- data.table(
+  general_id        = c(1, 1, 2, 3, 3, 4),
+  escoskill_level_3 = c("Python", "SQL", "Python", "SQL", "Stats", "SQL")
+)
+
+isco <- data.table(
+  code           = c("E001", "E002"),
+  preferredLabel = c("Software developer", "Data analyst")
+)
+
+skillist_dt <- data.table(
+  escoskill_level_3 = c("Python", "SQL", "Stats"),
+  diffusione        = c("centrale", "alta", "minima")
+)
+
+# 2. build profile -----
+profile <- build_profession_skill_profile(
+  ann, ski, isco, skillist_dt
+)
+```
+
+**Output columns:** `preferredLabel`, `escoskill_level_3` (or
+`ESCOSKILL_LEVEL_3`), `diffusione`, `annunci`.
+
+
+## Visualization
+
+The package provides two plotting functions, both requiring suggested packages
+(ggplot2, ggraph, tidygraph).
+
+### plot_cooc_graph()
+
+Renders a skill co-occurrence network graph using `ggraph`. Edge width and
+transparency scale with co-occurrence weight. Only the largest connected
+component is plotted.
+
+```{r}
+# 1. co-occurrence edge list -----
+cooc_edges <- data.table(
+  from   = c("Python", "Python", "SQL", "Docker", "Docker"),
+  to     = c("SQL", "Docker", "Docker", "Kubernetes", "Linux"),
+  weight = c(150, 80, 60, 90, 70)
+)
+
+# 2. plot network -----
+plot_cooc_graph(cooc_edges, profession = "Software developer", layout = "fr")
+```
+
+The `layout` parameter accepts any layout algorithm supported by `ggraph`
+(e.g., `"fr"`, `"kk"`, `"stress"`, `"circle"`).
+
+### plot_skill_ranking()
+
+Draws a line chart showing how skill ranks evolve over time for a single
+profession. When `skills = NULL`, the function automatically selects the 10
+most frequently occurring skills.
+
+```{r}
+# 1. ranking series -----
+serie <- data.table(
+  mese         = rep(as.Date(c("2022-01-01", "2023-01-01", "2024-01-01")),
+                     each = 3),
+  skill        = rep(c("Python", "SQL", "Docker"), 3),
+  rango        = c(1, 2, 3, 2, 1, 3, 1, 2, 4),
+  N            = c(100, 90, 50, 110, 120, 55, 130, 115, 40),
+  professione  = rep("Software developer", 9)
+)
+
+# 2. plot ranking evolution -----
+plot_skill_ranking(serie, profession = "Software developer")
+
+# 3. plot specific skills only -----
+plot_skill_ranking(serie, profession = "Software developer",
+                   skills = c("Python", "SQL"))
+```
+
+
+## Included Datasets
+
+The package ships with three pre-computed datasets, available via `data()`.
+
+### isco_gruppi
+
+ESCO ISCO group classification mapping occupation codes to profession names and
+hierarchy labels.
+
+```{r}
+data(isco_gruppi)
+```
+
+| Column | Description |
+|--------|-------------|
+| `code` | ESCO occupation code |
+| `preferredLabel` | Profession name (Italian) |
+| `esco_v0101_hier_label_1` | Hierarchy level 1 |
+| `esco_v0101_hier_label_2` | Hierarchy level 2 |
+| `esco_v0101_hier_label_3` | Hierarchy level 3 |
+
+### skillist
+
+Pre-computed master skills list with frequency, reuse type, and domain flags.
+
+```{r}
+data(skillist)
+```
+
+| Column | Description |
+|--------|-------------|
+| `escoskill_level_3` | Skill identifier (ESCO level 3) |
+| `esco_v0101_reusetype` | Reuse type (sector-specific, transversal, occupation-specific, multisettoriale) |
+| `N` | Recurrence count |
+| `tipo` | Italian type label |
+| `pillar_softskills` | Soft-skill flag |
+| `esco_v0101_ict` | ICT skill flag |
+| `esco_v0101_green` | Green skill flag |
+| `esco_v0101_language` | Language skill flag |
+
+### cooccorrenza
+
+Pre-computed global skill co-occurrence edges with relative-risk filtering
+applied.
+
+```{r}
+data(cooccorrenza)
+```
+
+| Column | Description |
+|--------|-------------|
+| `from` | First skill in the pair |
+| `to` | Second skill in the pair |
+| `weight` | Co-occurrence count (relative risk > 1) |
+
+
+## Typical Workflow
+
+The following outlines a complete end-to-end pipeline using skillviz functions.
+
+```{r}
+library(skillviz)
+library(data.table)
+
+# 1. load reference data -----
+esco_mapping <- read_esco_mapping(file = "mappa_cpv_esco_iv.fst")
+isco         <- read_isco_groups("ESCO dataset - v1.1.1 - classification - it - csv")
+
+# 2. load and deduplicate announcements -----
+# ann_raw <- fst::read_fst("announcements.fst", as.data.table = TRUE)
+# ann     <- deduplicate_annunci(ann_raw, active_date = as.IDate("2024-01-01"))
+
+# 3. build crosswalk -----
+# cpi3      <- fst::read_fst("cpi3.fst", as.data.table = TRUE)
+# crosswalk <- build_cpi_esco_crosswalk(esco_mapping, cpi3)
+
+# 4. enrich announcements -----
+# ann_esco <- prepare_annunci_esco(ann_raw, esco_mapping)
+
+# 5. source stability filtering -----
+# tst      <- prepare_source_tsibble(ann_raw)
+# features <- compute_source_features(tst)
+# stable   <- filter_stable_sources(features, cv_threshold = 0.6, min_total = 100)
+# ann_filt <- filter_annunci_by_source(ann_raw, stable)
+
+# 6. skill relevance -----
+# balassa   <- compute_balassa_index(skills)
+# diffusion <- compute_skill_diffusion(skills_agg)
+# master    <- build_skillist(skills, diffusion)
+
+# 7. co-occurrence networks -----
+# cooc_mat  <- compute_cooc_matrix(skills)
+# rr_edges  <- filter_relative_risk(cooc_mat)
+# cooc_prof <- cooc_all_professions(skills, top_n = 30L, min_weight = 10L)
+
+# 8. community detection -----
+# communities <- detect_skill_communities(rr_edges, method = "infomap")
+
+# 9. professional distance and clustering -----
+# dist_mat <- compute_profession_distance(competenze, method = "binary")
+# hc       <- cluster_professions(dist_mat, method = "ward.D2")
+
+# 10. salary analysis -----
+# sal       <- extract_salary_data(ann_raw)
+# sal_skill <- compute_salary_by_skill(sal, skills)
+
+# 11. temporal analysis -----
+# serie     <- compute_skill_ranking_series(competenze, time_unit = "year")
+# variation <- compute_skill_variation(serie, min_n = 30L, top_k = 10L)
+
+# 12. visualization -----
+# plot_cooc_graph(rr_edges, profession = "Software developer")
+# plot_skill_ranking(serie, profession = "ICT specialists")
+```
+
+The pipeline is modular: each step produces a `data.table` (or igraph/dist
+object) that feeds into the next step. This design supports both interactive
+exploration and integration with workflow managers such as
+[targets](https://docs.ropensci.org/targets/).

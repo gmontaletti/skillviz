@@ -11,6 +11,9 @@ Description: Analyzes skill requirements from Online Job Advertising (OJA) data.
     professional distance clustering, and temporal skill ranking. Built on
     ESCO and CP2021 (Italian professional classifications) taxonomies.
 License: MIT + file LICENSE
+URL: https://gmontaletti.github.io/skillviz/,
+    https://github.com/gmontaletti/skillviz
+BugReports: https://github.com/gmontaletti/skillviz/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
@@ -38,5 +41,7 @@ Suggests:
     knitr,
     rmarkdown,
     testthat (>= 3.0.0)
+VignetteBuilder: knitr
 Config/testthat/edition: 3
+Config/Needs/website: pkgdown
 LazyData: true

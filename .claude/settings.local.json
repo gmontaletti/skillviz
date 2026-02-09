@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__r-btw__btw_tool_git_status",
+      "mcp__r-btw__btw_tool_git_log",
+      "mcp__r-btw__btw_tool_files_list_files",
+      "Bash(gh repo view:*)",
+      "mcp__r-btw__btw_tool_pkg_check",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: resolve R CMD check NOTEs for missing imports and globals\n\nAdd importFrom for stats::median, stats::xtabs, utils::head.\nDeclare .data and tot in globalVariables.\nRemove VignetteBuilder field \\(no vignettes yet\\).\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "mcp__r-btw__btw_tool_pkg_document",
+      "mcp__r-btw__btw_tool_pkg_test",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: add vignettes, pkgdown website, README, and GitHub Actions\n\n- Add quick start vignette \\(skillviz-quickstart.Rmd\\)\n- Add comprehensive guide vignette \\(skillviz-guide.Rmd\\)\n- Add _pkgdown.yml with organized reference sections\n- Add GitHub Actions for pkgdown deployment and R-CMD-check\n- Add README.md with installation, features, and citation\n- Update DESCRIPTION with URL, BugReports, Config/Needs/website\n- Update .Rbuildignore for pkgdown and GitHub files\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}
