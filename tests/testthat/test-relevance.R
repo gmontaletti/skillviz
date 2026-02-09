@@ -257,13 +257,12 @@ test_that("build_skillist errors on missing columns in diffusion", {
 
 test_that("compute_idf_classification returns expected structure", {
   set.seed(42)
+  # Need enough unique skills so that threshold_rows = round(n * 0.025) - 1 >= 1
+  # With 100 unique skills: round(100 * 0.025) - 1 = 2 - 1 = 1
+  skill_labels <- paste0("skill_", seq_len(100))
   skills_merged <- data.table::data.table(
-    general_id = rep(1:100, each = 3),
-    escoskill_level_3 = sample(
-      c("A", "B", "C", "D", "E"),
-      300,
-      replace = TRUE
-    )
+    general_id = rep(1:200, each = 5),
+    escoskill_level_3 = sample(skill_labels, 1000, replace = TRUE)
   )
 
   result <- compute_idf_classification(skills_merged)
@@ -282,13 +281,10 @@ test_that("compute_idf_classification returns expected structure", {
 
 test_that("compute_idf_classification diffuse_skills is subset of all skills", {
   set.seed(123)
+  skill_labels <- paste0("skill_", seq_len(100))
   skills_merged <- data.table::data.table(
-    general_id = rep(1:50, each = 4),
-    escoskill_level_3 = sample(
-      paste0("skill_", 1:10),
-      200,
-      replace = TRUE
-    )
+    general_id = rep(1:200, each = 5),
+    escoskill_level_3 = sample(skill_labels, 1000, replace = TRUE)
   )
 
   result <- compute_idf_classification(skills_merged)
