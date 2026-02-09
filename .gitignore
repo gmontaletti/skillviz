@@ -1,0 +1,9 @@
+.Rhistory
+.Rapp.history
+.Rproj.user/
+.httr-oauth
+.Renviron
+*.o
+*.so
+*.dll
+inst/doc

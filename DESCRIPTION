@@ -1,0 +1,43 @@
+Package: skillviz
+Title: Skill Co-Occurrence Analysis and Visualization from Online Job Advertisements
+Version: 0.1.0
+Authors@R:
+    person("Giampaolo", "Montaletti", , "giampaolo.montaletti@gmail.com",
+           role = c("aut", "cre"),
+           comment = c(ORCID = "0009-0002-5327-1122"))
+Description: Analyzes skill requirements from Online Job Advertising (OJA) data.
+    Provides tools for computing skill specialization indices (Balassa/RCA),
+    co-occurrence networks, source stability filtering, salary analysis,
+    professional distance clustering, and temporal skill ranking. Built on
+    ESCO and CP2021 (Italian professional classifications) taxonomies.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends:
+    R (>= 4.1.0)
+Imports:
+    data.table (>= 1.14.0),
+    fst,
+    igraph,
+    Matrix,
+    collapse
+Suggests:
+    ggplot2,
+    ggraph,
+    tidygraph,
+    ggrepel,
+    tsibble,
+    feasts,
+    fable,
+    fabletools,
+    readxl,
+    RPostgres,
+    DBI,
+    lubridate,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+LazyData: true
