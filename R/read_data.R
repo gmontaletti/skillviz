@@ -313,3 +313,124 @@ read_ojv_zip <- function(
 
   dt
 }
+
+# 5. normalize_ojv -----
+
+#' Normalize OJV data from ZIP files
+#'
+#' Reads all three OJV file types (postings, skills, postings_raw) from a
+#' directory of ZIP files, deduplicates postings to one row per
+#' \code{general_id}, and ensures referential integrity across tables.
+#'
+#' Deduplication keeps the most recent observation per \code{general_id},
+#' determined by \code{year_grab_date} and \code{month_grab_date} columns
+#' (descending sort). If these columns are absent, the first occurrence is
+#' kept.
+#'
+#' @param path Character scalar. Directory containing the ZIP files.
+#' @param years Integer vector of years to include, or \code{NULL}
+#'   (default) for all available years. Passed to \code{\link{read_ojv_zip}}.
+#' @param months Integer vector of months to include, or \code{NULL}
+#'   (default) for all available months. Passed to \code{\link{read_ojv_zip}}.
+#' @param verbose Logical scalar. If \code{TRUE} (default), prints
+#'   progress messages to the console.
+#'
+#' @return A named list with three \code{data.table} elements, all keyed
+#'   on \code{general_id}:
+#'   \describe{
+#'     \item{postings}{Deduplicated job posting metadata (one row per
+#'       \code{general_id}).}
+#'     \item{skills}{Skill-level data, filtered to \code{general_id}
+#'       values present in \code{postings}.}
+#'     \item{companies}{Company name data from postings_raw, filtered to
+#'       \code{general_id} values present in \code{postings}.}
+#'   }
+#'
+#' @export
+#' @examples
+#' \dontrun{
+#' ojv <- normalize_ojv("/path/to/zip/dir")
+#' ojv$postings
+#' ojv$skills
+#' ojv$companies
+#'
+#' # Filter to 2024 data only
+#' ojv24 <- normalize_ojv("/path/to/zip/dir", years = 2024L)
+#' }
+normalize_ojv <- function(path, years = NULL, months = NULL, verbose = TRUE) {
+  # 1. read all three types -----
+  postings <- read_ojv_zip(
+    path,
+    type = "postings",
+    years = years,
+    months = months,
+    verbose = verbose
+  )
+  skills <- read_ojv_zip(
+    path,
+    type = "skills",
+    years = years,
+    months = months,
+    verbose = verbose
+  )
+  companies <- read_ojv_zip(
+    path,
+    type = "postings_raw",
+    years = years,
+    months = months,
+    verbose = verbose
+  )
+
+  # 2. deduplicate postings -----
+  if (nrow(postings) > 0L && "general_id" %in% names(postings)) {
+    grab_cols <- intersect(
+      c("year_grab_date", "month_grab_date"),
+      names(postings)
+    )
+    if (length(grab_cols) > 0L) {
+      data.table::setorderv(
+        postings,
+        grab_cols,
+        order = rep(-1L, length(grab_cols))
+      )
+    }
+    n_before <- nrow(postings)
+    postings <- unique(postings, by = "general_id", fromLast = FALSE)
+    if (verbose) {
+      n_dropped <- n_before - nrow(postings)
+      message(
+        "normalize_ojv: deduplicated postings from ",
+        format(n_before, big.mark = ","),
+        " to ",
+        format(nrow(postings), big.mark = ","),
+        " rows (",
+        format(n_dropped, big.mark = ","),
+        " duplicates removed)"
+      )
+    }
+  }
+
+  # 3. enforce referential integrity -----
+  if (nrow(postings) > 0L && "general_id" %in% names(postings)) {
+    valid_ids <- postings[["general_id"]]
+    if (nrow(skills) > 0L && "general_id" %in% names(skills)) {
+      skills <- skills[general_id %in% valid_ids]
+    }
+    if (nrow(companies) > 0L && "general_id" %in% names(companies)) {
+      companies <- companies[general_id %in% valid_ids]
+    }
+  }
+
+  # 4. set keys -----
+  if (nrow(postings) > 0L && "general_id" %in% names(postings)) {
+    data.table::setkey(postings, general_id)
+  }
+  if (nrow(skills) > 0L && "general_id" %in% names(skills)) {
+    data.table::setkey(skills, general_id)
+  }
+  if (nrow(companies) > 0L && "general_id" %in% names(companies)) {
+    data.table::setkey(companies, general_id)
+  }
+
+  list(postings = postings, skills = skills, companies = companies)
+}
