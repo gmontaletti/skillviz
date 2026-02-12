@@ -26,6 +26,8 @@ reference:
     contents:
       - read_esco_mapping
       - read_isco_groups
+      - read_ojv_zip
+      - normalize_ojv
       - deduplicate_annunci
 
   - title: Classification Crosswalks
