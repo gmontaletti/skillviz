@@ -92,6 +92,10 @@ announcements.
   : Read CPI-ESCO mapping table
 - [`read_isco_groups()`](https://gmontaletti.github.io/skillviz/reference/read_isco_groups.md)
   : Read ESCO ISCO classification from CSV directory
+- [`read_ojv_zip()`](https://gmontaletti.github.io/skillviz/reference/read_ojv_zip.md)
+  : Read OJV data from ZIP files
+- [`normalize_ojv()`](https://gmontaletti.github.io/skillviz/reference/normalize_ojv.md)
+  : Normalize OJV data from ZIP files
 - [`deduplicate_annunci()`](https://gmontaletti.github.io/skillviz/reference/deduplicate_annunci.md)
   : Deduplicate job announcements
 

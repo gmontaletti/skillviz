@@ -36,6 +36,7 @@
 <url><loc>https://gmontaletti.github.io/skillviz/reference/filter_stable_sources.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/index.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/isco_gruppi.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/normalize_ojv.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/parse_ymd_columns.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/plot_cooc_graph.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/plot_skill_ranking.html</loc></url>
@@ -44,6 +45,7 @@
 <url><loc>https://gmontaletti.github.io/skillviz/reference/prepare_source_tsibble.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/read_esco_mapping.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/read_isco_groups.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/read_ojv_zip.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/skillist.html</loc></url>
 </urlset>
 
