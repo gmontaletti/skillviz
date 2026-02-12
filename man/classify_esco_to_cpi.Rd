@@ -4,24 +4,15 @@
 \alias{classify_esco_to_cpi}
 \title{Classify unmapped ESCO L4 codes to CPI groups via Naive Bayes}
 \usage{
-classify_esco_to_cpi(
-  postings,
-  skills,
-  cpi_esco,
-  top_k = 3L,
-  alpha = 1,
-  verbose = TRUE
-)
+classify_esco_to_cpi(postings, skills, top_k = 3L, alpha = 1, verbose = TRUE)
 }
 \arguments{
 \item{postings}{A data.table from \code{normalize_ojv()$postings}. Needs
-\code{general_id}, \code{idesco_level_4}.}
+\code{general_id}, \code{idesco_level_4}, \code{cp2021_id_level_3}, and
+\code{cp2021_level_3}.}
 
 \item{skills}{A data.table from \code{normalize_ojv()$skills}. Needs
 \code{general_id} and \code{escoskill_level_3} (or \code{ESCOSKILL_LEVEL_3}).}
-
-\item{cpi_esco}{A data.table from \code{\link[=build_cpi_esco_crosswalk]{build_cpi_esco_crosswalk()}}. Needs
-\code{idesco_level_4}, \code{cod_3}, \code{nome_3}.}
 
 \item{top_k}{Integer, number of top CPI predictions per ESCO L4 code
 (default: 3).}
@@ -43,26 +34,25 @@ A data.table keyed on \code{idesco_level_4} with columns:
 }
 }
 \description{
-When the standard CPI-ESCO crosswalk does not cover all ESCO level 4
-codes present in OJV postings, this function uses a Multinomial Naive
-Bayes classifier to predict CPI 3-digit groups for unmapped codes.
-Training data comes from postings whose ESCO L4 code is present in the
-crosswalk; prediction uses the skill profile of unmapped postings.
+Uses a Multinomial Naive Bayes classifier to predict CPI 3-digit groups
+for ESCO level 4 codes that lack a CP2021 mapping in the postings data.
+The crosswalk between ESCO L4 and CPI groups is derived directly from
+the postings via majority vote on the \code{cp2021_id_level_3} column.
+Training data comes from postings with a non-missing CP2021 code;
+prediction uses the skill profile of unmapped postings.
 }
 \examples{
 postings <- data.table::data.table(
   general_id = 1:6,
-  idesco_level_4 = c("E001", "E001", "E002", "E002", "E003", "E003")
+  idesco_level_4 = c("E001", "E001", "E002", "E002", "E003", "E003"),
+  cp2021_id_level_3 = c("2.1.1", "2.1.1", "3.1.2", "3.1.2", NA, NA),
+  cp2021_level_3 = c("Informatici", "Informatici",
+                      "Ingegneri", "Ingegneri", NA, NA)
 )
 skills <- data.table::data.table(
   general_id = c(1L, 1L, 2L, 3L, 3L, 4L, 5L, 5L, 6L),
   escoskill_level_3 = c("S01", "S02", "S01", "S03", "S04", "S03",
                         "S01", "S02", "S01")
 )
-cpi_esco <- data.table::data.table(
-  idesco_level_4 = c("E001", "E002"),
-  cod_3 = c("2.1.1", "3.1.2"),
-  nome_3 = c("Informatici", "Ingegneri")
-)
-result <- classify_esco_to_cpi(postings, skills, cpi_esco, top_k = 2L)
+result <- classify_esco_to_cpi(postings, skills, top_k = 2L)
 }

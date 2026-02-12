@@ -10,7 +10,16 @@ make_test_data <- function() {
   # E003 has only S01+S02 which are exclusive to class 2.1.1.
   postings <- data.table::data.table(
     general_id = 1:6,
-    idesco_level_4 = c("E001", "E001", "E002", "E002", "E003", "E003")
+    idesco_level_4 = c("E001", "E001", "E002", "E002", "E003", "E003"),
+    cp2021_id_level_3 = c("2.1.1", "2.1.1", "3.1.2", "3.1.2", NA, NA),
+    cp2021_level_3 = c(
+      "Informatici",
+      "Informatici",
+      "Ingegneri",
+      "Ingegneri",
+      NA,
+      NA
+    )
   )
   skills <- data.table::data.table(
     general_id = c(
@@ -46,12 +55,7 @@ make_test_data <- function() {
       "S02"
     )
   )
-  cpi_esco <- data.table::data.table(
-    idesco_level_4 = c("E001", "E002"),
-    cod_3 = c("2.1.1", "3.1.2"),
-    nome_3 = c("Informatici", "Ingegneri")
-  )
-  list(postings = postings, skills = skills, cpi_esco = cpi_esco)
+  list(postings = postings, skills = skills)
 }
 
 # 1. Return structure -----
@@ -61,7 +65,6 @@ test_that("classify_esco_to_cpi returns expected structure and key", {
   result <- classify_esco_to_cpi(
     td$postings,
     td$skills,
-    td$cpi_esco,
     verbose = FALSE
   )
 
@@ -86,7 +89,6 @@ test_that("probabilities sum to 1 within each ESCO L4 code", {
   result <- classify_esco_to_cpi(
     td$postings,
     td$skills,
-    td$cpi_esco,
     verbose = FALSE
   )
 
@@ -103,7 +105,6 @@ test_that("top_k = 1 returns at most 1 row per ESCO L4", {
   result <- classify_esco_to_cpi(
     td$postings,
     td$skills,
-    td$cpi_esco,
     top_k = 1L,
     verbose = FALSE
   )
@@ -119,7 +120,6 @@ test_that("rank 1 has highest probability and probabilities are non-increasing",
   result <- classify_esco_to_cpi(
     td$postings,
     td$skills,
-    td$cpi_esco,
     verbose = FALSE
   )
 
@@ -147,7 +147,6 @@ test_that("no unmapped codes returns 0-row data.table with correct columns", {
   result <- classify_esco_to_cpi(
     td$postings,
     td$skills,
-    td$cpi_esco,
     verbose = FALSE
   )
 
@@ -172,7 +171,6 @@ test_that("E003 is classified as 2.1.1 (Informatici) based on shared skills", {
   result <- classify_esco_to_cpi(
     td$postings,
     td$skills,
-    td$cpi_esco,
     top_k = 1L,
     verbose = FALSE
   )
@@ -188,7 +186,16 @@ test_that("different alpha values produce valid but distinct results", {
   # classes score and alpha affects posterior probabilities.
   postings_alpha <- data.table::data.table(
     general_id = 1:6,
-    idesco_level_4 = c("E001", "E001", "E002", "E002", "E003", "E003")
+    idesco_level_4 = c("E001", "E001", "E002", "E002", "E003", "E003"),
+    cp2021_id_level_3 = c("2.1.1", "2.1.1", "3.1.2", "3.1.2", NA, NA),
+    cp2021_level_3 = c(
+      "Informatici",
+      "Informatici",
+      "Ingegneri",
+      "Ingegneri",
+      NA,
+      NA
+    )
   )
   skills_alpha <- data.table::data.table(
     general_id = c(
@@ -226,23 +233,16 @@ test_that("different alpha values produce valid but distinct results", {
       "S05"
     )
   )
-  cpi_esco_alpha <- data.table::data.table(
-    idesco_level_4 = c("E001", "E002"),
-    cod_3 = c("2.1.1", "3.1.2"),
-    nome_3 = c("Informatici", "Ingegneri")
-  )
 
   result_low <- classify_esco_to_cpi(
     postings_alpha,
     skills_alpha,
-    cpi_esco_alpha,
     alpha = 0.001,
     verbose = FALSE
   )
   result_high <- classify_esco_to_cpi(
     postings_alpha,
     skills_alpha,
-    cpi_esco_alpha,
     alpha = 10.0,
     verbose = FALSE
   )
@@ -288,7 +288,6 @@ test_that("uppercase ESCOSKILL_LEVEL_3 column is handled correctly", {
   result <- classify_esco_to_cpi(
     td$postings,
     td$skills,
-    td$cpi_esco,
     verbose = FALSE
   )
 
@@ -302,10 +301,81 @@ test_that("verbose controls message output", {
   td <- make_test_data()
 
   expect_message(
-    classify_esco_to_cpi(td$postings, td$skills, td$cpi_esco, verbose = TRUE)
+    classify_esco_to_cpi(td$postings, td$skills, verbose = TRUE)
   )
 
   expect_silent(
-    classify_esco_to_cpi(td$postings, td$skills, td$cpi_esco, verbose = FALSE)
+    classify_esco_to_cpi(td$postings, td$skills, verbose = FALSE)
   )
+})
+
+# 10. Mixed mapped/unmapped postings for same ESCO L4 -----
+
+test_that("ESCO L4 with some mapped and some NA postings is treated as mapped", {
+  postings_mixed <- data.table::data.table(
+    general_id = 1:6,
+    idesco_level_4 = c("E001", "E001", "E001", "E002", "E003", "E003"),
+    cp2021_id_level_3 = c("2.1.1", "2.1.1", NA, "3.1.2", NA, NA),
+    cp2021_level_3 = c(
+      "Informatici",
+      "Informatici",
+      NA,
+      "Ingegneri",
+      NA,
+      NA
+    )
+  )
+  skills_mixed <- data.table::data.table(
+    general_id = c(1L, 1L, 2L, 3L, 4L, 4L, 5L, 5L, 6L),
+    escoskill_level_3 = c(
+      "S01",
+      "S02",
+      "S01",
+      "S01",
+      "S03",
+      "S04",
+      "S01",
+      "S02",
+      "S01"
+    )
+  )
+
+  result <- classify_esco_to_cpi(
+    postings_mixed,
+    skills_mixed,
+    top_k = 1L,
+    verbose = FALSE
+  )
+
+  # E001 has at least one mapped posting, so it should be mapped
+  expect_false("E001" %in% result$idesco_level_4)
+  # E003 is fully unmapped, so it should be classified
+  expect_true("E003" %in% result$idesco_level_4)
+})
+
+# 11. Empty string cp2021_id_level_3 treated as unmapped -----
+
+test_that("empty string cp2021_id_level_3 is treated as unmapped", {
+  postings_empty <- data.table::data.table(
+    general_id = 1:4,
+    idesco_level_4 = c("E001", "E001", "E002", "E002"),
+    cp2021_id_level_3 = c("2.1.1", "2.1.1", "", ""),
+    cp2021_level_3 = c("Informatici", "Informatici", "", "")
+  )
+  skills_empty <- data.table::data.table(
+    general_id = c(1L, 1L, 2L, 3L, 3L, 4L),
+    escoskill_level_3 = c("S01", "S02", "S01", "S01", "S02", "S01")
+  )
+
+  result <- classify_esco_to_cpi(
+    postings_empty,
+    skills_empty,
+    top_k = 1L,
+    verbose = FALSE
+  )
+
+  # E002 has empty string CPI codes, so it should be treated as unmapped
+  expect_true("E002" %in% result$idesco_level_4)
+  # E001 is mapped
+  expect_false("E001" %in% result$idesco_level_4)
 })

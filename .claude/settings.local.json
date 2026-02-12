@@ -11,7 +11,18 @@
       "Bash(git push:*)",
       "mcp__r-btw__btw_tool_pkg_document",
       "mcp__r-btw__btw_tool_pkg_test",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: add vignettes, pkgdown website, README, and GitHub Actions\n\n- Add quick start vignette \\(skillviz-quickstart.Rmd\\)\n- Add comprehensive guide vignette \\(skillviz-guide.Rmd\\)\n- Add _pkgdown.yml with organized reference sections\n- Add GitHub Actions for pkgdown deployment and R-CMD-check\n- Add README.md with installation, features, and citation\n- Update DESCRIPTION with URL, BugReports, Config/Needs/website\n- Update .Rbuildignore for pkgdown and GitHub files\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: add vignettes, pkgdown website, README, and GitHub Actions\n\n- Add quick start vignette \\(skillviz-quickstart.Rmd\\)\n- Add comprehensive guide vignette \\(skillviz-guide.Rmd\\)\n- Add _pkgdown.yml with organized reference sections\n- Add GitHub Actions for pkgdown deployment and R-CMD-check\n- Add README.md with installation, features, and citation\n- Update DESCRIPTION with URL, BugReports, Config/Needs/website\n- Update .Rbuildignore for pkgdown and GitHub files\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "mcp__r-btw__btw_tool_docs_available_vignettes",
+      "Bash(Rscript:*)",
+      "Bash(open:*)",
+      "Bash(gh api:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(for f in /Users/giampaolomontaletti/Documents/annunci/*.zip)",
+      "Bash(do echo \"=== $f ===\")",
+      "Bash(unzip:*)",
+      "Bash(done)"
     ]
   }
 }

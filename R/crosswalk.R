@@ -199,18 +199,18 @@ prepare_annunci_geography <- function(
 
 #' Classify unmapped ESCO L4 codes to CPI groups via Naive Bayes
 #'
-#' When the standard CPI-ESCO crosswalk does not cover all ESCO level 4
-#' codes present in OJV postings, this function uses a Multinomial Naive
-#' Bayes classifier to predict CPI 3-digit groups for unmapped codes.
-#' Training data comes from postings whose ESCO L4 code is present in the
-#' crosswalk; prediction uses the skill profile of unmapped postings.
+#' Uses a Multinomial Naive Bayes classifier to predict CPI 3-digit groups
+#' for ESCO level 4 codes that lack a CP2021 mapping in the postings data.
+#' The crosswalk between ESCO L4 and CPI groups is derived directly from
+#' the postings via majority vote on the `cp2021_id_level_3` column.
+#' Training data comes from postings with a non-missing CP2021 code;
+#' prediction uses the skill profile of unmapped postings.
 #'
 #' @param postings A data.table from `normalize_ojv()$postings`. Needs
-#'   `general_id`, `idesco_level_4`.
+#'   `general_id`, `idesco_level_4`, `cp2021_id_level_3`, and
+#'   `cp2021_level_3`.
 #' @param skills A data.table from `normalize_ojv()$skills`. Needs
 #'   `general_id` and `escoskill_level_3` (or `ESCOSKILL_LEVEL_3`).
-#' @param cpi_esco A data.table from [build_cpi_esco_crosswalk()]. Needs
-#'   `idesco_level_4`, `cod_3`, `nome_3`.
 #' @param top_k Integer, number of top CPI predictions per ESCO L4 code
 #'   (default: 3).
 #' @param alpha Numeric, Laplace smoothing parameter (default: 1.0).
@@ -229,23 +229,20 @@ prepare_annunci_geography <- function(
 #' @examples
 #' postings <- data.table::data.table(
 #'   general_id = 1:6,
-#'   idesco_level_4 = c("E001", "E001", "E002", "E002", "E003", "E003")
+#'   idesco_level_4 = c("E001", "E001", "E002", "E002", "E003", "E003"),
+#'   cp2021_id_level_3 = c("2.1.1", "2.1.1", "3.1.2", "3.1.2", NA, NA),
+#'   cp2021_level_3 = c("Informatici", "Informatici",
+#'                       "Ingegneri", "Ingegneri", NA, NA)
 #' )
 #' skills <- data.table::data.table(
 #'   general_id = c(1L, 1L, 2L, 3L, 3L, 4L, 5L, 5L, 6L),
 #'   escoskill_level_3 = c("S01", "S02", "S01", "S03", "S04", "S03",
 #'                         "S01", "S02", "S01")
 #' )
-#' cpi_esco <- data.table::data.table(
-#'   idesco_level_4 = c("E001", "E002"),
-#'   cod_3 = c("2.1.1", "3.1.2"),
-#'   nome_3 = c("Informatici", "Ingegneri")
-#' )
-#' result <- classify_esco_to_cpi(postings, skills, cpi_esco, top_k = 2L)
+#' result <- classify_esco_to_cpi(postings, skills, top_k = 2L)
 classify_esco_to_cpi <- function(
   postings,
   skills,
-  cpi_esco,
   top_k = 3L,
   alpha = 1.0,
   verbose = TRUE
@@ -253,12 +250,7 @@ classify_esco_to_cpi <- function(
   # 1. input validation -----
   check_columns(
     postings,
-    c("general_id", "idesco_level_4"),
-    caller = "classify_esco_to_cpi"
-  )
-  check_columns(
-    cpi_esco,
-    c("idesco_level_4", "cod_3", "nome_3"),
+    c("general_id", "idesco_level_4", "cp2021_id_level_3", "cp2021_level_3"),
     caller = "classify_esco_to_cpi"
   )
 
@@ -276,7 +268,25 @@ classify_esco_to_cpi <- function(
   }
 
   # 3. identify mapped vs unmapped ESCO L4 codes -----
-  mapped_esco <- cpi_esco[, unique(idesco_level_4)]
+  is_mapped_vec <- !is.na(postings$cp2021_id_level_3) &
+    nzchar(postings$cp2021_id_level_3)
+
+  # Build ESCO-level lookup via majority vote from mapped postings
+  esco_cpi_lookup <- postings[
+    is_mapped_vec,
+    .N,
+    by = .(idesco_level_4, cp2021_id_level_3, cp2021_level_3)
+  ]
+  setorder(esco_cpi_lookup, idesco_level_4, -N)
+  esco_cpi_lookup <- esco_cpi_lookup[, .SD[1L], by = idesco_level_4]
+  esco_cpi_lookup[, N := NULL]
+  setnames(
+    esco_cpi_lookup,
+    c("cp2021_id_level_3", "cp2021_level_3"),
+    c("cod_3", "nome_3")
+  )
+
+  mapped_esco <- esco_cpi_lookup[, unique(idesco_level_4)]
   all_esco <- postings[, unique(idesco_level_4)]
   unmapped_esco <- setdiff(all_esco, mapped_esco)
 
@@ -310,13 +320,13 @@ classify_esco_to_cpi <- function(
 
   # 4. build training set -----
   train_postings <- postings[
-    idesco_level_4 %in% mapped_esco,
-    .(general_id, idesco_level_4)
+    is_mapped_vec,
+    .(general_id, idesco_level_4, cp2021_id_level_3, cp2021_level_3)
   ]
-  train_postings <- merge(
+  setnames(
     train_postings,
-    cpi_esco[, .(idesco_level_4, cod_3, nome_3)],
-    by = "idesco_level_4"
+    c("cp2021_id_level_3", "cp2021_level_3"),
+    c("cod_3", "nome_3")
   )
 
   train <- merge(
@@ -412,7 +422,8 @@ classify_esco_to_cpi <- function(
   result <- scores[rank <= top_k]
 
   # 10. attach labels and metadata -----
-  cpi_labels <- unique(cpi_esco[, .(cod_3, nome_3)])
+  cpi_labels <- unique(train_postings[, .(cod_3, nome_3)])
+  cpi_labels <- cpi_labels[, .(nome_3 = nome_3[1L]), by = cod_3]
   result <- merge(result, cpi_labels, by = "cod_3", all.x = TRUE)
 
   posting_counts <- pred_postings[,
