@@ -26,6 +26,8 @@ Build crosswalk tables between CPI, ESCO, and CP2021 classifications.
   : Merge announcements with ESCO mapping and parse dates
 - [`prepare_annunci_geography()`](https://gmontaletti.github.io/skillviz/reference/prepare_annunci_geography.md)
   : Prepare announcements with CPI geographic dimension
+- [`classify_esco_to_cpi()`](https://gmontaletti.github.io/skillviz/reference/classify_esco_to_cpi.md)
+  : Classify unmapped ESCO L4 codes to CPI groups via Naive Bayes
 
 ## Skill Relevance Analysis
 
