@@ -3,6 +3,7 @@
 export(build_cpi_esco_crosswalk)
 export(build_profession_skill_profile)
 export(build_skillist)
+export(classify_esco_to_cpi)
 export(cluster_professions)
 export(compute_balassa_index)
 export(compute_cooc_matrix)

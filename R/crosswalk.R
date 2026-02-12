@@ -194,3 +194,256 @@ prepare_annunci_geography <- function(
   data.table::setorder(cpi, CPI, year_grab_date, -N)
   cpi
 }
+
+# 4. classify_esco_to_cpi -----
+
+#' Classify unmapped ESCO L4 codes to CPI groups via Naive Bayes
+#'
+#' When the standard CPI-ESCO crosswalk does not cover all ESCO level 4
+#' codes present in OJV postings, this function uses a Multinomial Naive
+#' Bayes classifier to predict CPI 3-digit groups for unmapped codes.
+#' Training data comes from postings whose ESCO L4 code is present in the
+#' crosswalk; prediction uses the skill profile of unmapped postings.
+#'
+#' @param postings A data.table from `normalize_ojv()$postings`. Needs
+#'   `general_id`, `idesco_level_4`.
+#' @param skills A data.table from `normalize_ojv()$skills`. Needs
+#'   `general_id` and `escoskill_level_3` (or `ESCOSKILL_LEVEL_3`).
+#' @param cpi_esco A data.table from [build_cpi_esco_crosswalk()]. Needs
+#'   `idesco_level_4`, `cod_3`, `nome_3`.
+#' @param top_k Integer, number of top CPI predictions per ESCO L4 code
+#'   (default: 3).
+#' @param alpha Numeric, Laplace smoothing parameter (default: 1.0).
+#' @param verbose Logical, print progress messages (default: TRUE).
+#' @return A data.table keyed on `idesco_level_4` with columns:
+#'   \describe{
+#'     \item{idesco_level_4}{The unmapped ESCO level 4 code.}
+#'     \item{cod_3}{Predicted CPI 3-digit code.}
+#'     \item{nome_3}{Predicted CPI 3-digit label.}
+#'     \item{probability}{Posterior probability (softmax-normalized).}
+#'     \item{rank}{Rank among top_k predictions (1 = best).}
+#'     \item{n_postings}{Number of postings with this ESCO L4.}
+#'     \item{n_skills}{Number of distinct skills observed for this ESCO L4.}
+#'   }
+#' @export
+#' @examples
+#' postings <- data.table::data.table(
+#'   general_id = 1:6,
+#'   idesco_level_4 = c("E001", "E001", "E002", "E002", "E003", "E003")
+#' )
+#' skills <- data.table::data.table(
+#'   general_id = c(1L, 1L, 2L, 3L, 3L, 4L, 5L, 5L, 6L),
+#'   escoskill_level_3 = c("S01", "S02", "S01", "S03", "S04", "S03",
+#'                         "S01", "S02", "S01")
+#' )
+#' cpi_esco <- data.table::data.table(
+#'   idesco_level_4 = c("E001", "E002"),
+#'   cod_3 = c("2.1.1", "3.1.2"),
+#'   nome_3 = c("Informatici", "Ingegneri")
+#' )
+#' result <- classify_esco_to_cpi(postings, skills, cpi_esco, top_k = 2L)
+classify_esco_to_cpi <- function(
+  postings,
+  skills,
+  cpi_esco,
+  top_k = 3L,
+  alpha = 1.0,
+  verbose = TRUE
+) {
+  # 1. input validation -----
+  check_columns(
+    postings,
+    c("general_id", "idesco_level_4"),
+    caller = "classify_esco_to_cpi"
+  )
+  check_columns(
+    cpi_esco,
+    c("idesco_level_4", "cod_3", "nome_3"),
+    caller = "classify_esco_to_cpi"
+  )
+
+  # 2. normalize skill column name -----
+  skill_col <- if ("ESCOSKILL_LEVEL_3" %in% names(skills)) {
+    "ESCOSKILL_LEVEL_3"
+  } else if ("escoskill_level_3" %in% names(skills)) {
+    "escoskill_level_3"
+  } else {
+    stop(
+      "classify_esco_to_cpi: skills must contain ESCOSKILL_LEVEL_3 ",
+      "or escoskill_level_3",
+      call. = FALSE
+    )
+  }
+
+  # 3. identify mapped vs unmapped ESCO L4 codes -----
+  mapped_esco <- cpi_esco[, unique(idesco_level_4)]
+  all_esco <- postings[, unique(idesco_level_4)]
+  unmapped_esco <- setdiff(all_esco, mapped_esco)
+
+  if (verbose) {
+    message(
+      "classify_esco_to_cpi: ",
+      length(mapped_esco),
+      " mapped, ",
+      length(unmapped_esco),
+      " unmapped, ",
+      length(all_esco),
+      " total ESCO L4 codes"
+    )
+  }
+
+  if (length(unmapped_esco) == 0L) {
+    if (verbose) {
+      message("classify_esco_to_cpi: no unmapped codes, returning empty table")
+    }
+    return(data.table(
+      idesco_level_4 = character(0),
+      cod_3 = character(0),
+      nome_3 = character(0),
+      probability = numeric(0),
+      rank = integer(0),
+      n_postings = integer(0),
+      n_skills = integer(0),
+      key = "idesco_level_4"
+    ))
+  }
+
+  # 4. build training set -----
+  train_postings <- postings[
+    idesco_level_4 %in% mapped_esco,
+    .(general_id, idesco_level_4)
+  ]
+  train_postings <- merge(
+    train_postings,
+    cpi_esco[, .(idesco_level_4, cod_3, nome_3)],
+    by = "idesco_level_4"
+  )
+
+  train <- merge(
+    skills[, .SD, .SDcols = c("general_id", skill_col)],
+    train_postings[, .(general_id, cod_3)],
+    by = "general_id"
+  )
+
+  setnames(train, skill_col, "skill")
+
+  # 5. compute class priors -----
+  class_counts <- train_postings[, .(n_docs = uniqueN(general_id)), by = cod_3]
+  n_total <- sum(class_counts$n_docs)
+  class_counts[, log_prior := log(n_docs / n_total)]
+
+  if (verbose) {
+    message(
+      "classify_esco_to_cpi: ",
+      nrow(class_counts),
+      " training classes, ",
+      n_total,
+      " training documents"
+    )
+  }
+
+  # 6. compute skill likelihoods with Laplace smoothing -----
+  skill_class <- train[, .(count = uniqueN(general_id)), by = .(cod_3, skill)]
+  V <- skills[, uniqueN(get(skill_col))]
+
+  skill_class <- merge(
+    skill_class,
+    class_counts[, .(cod_3, n_docs)],
+    by = "cod_3"
+  )
+  skill_class[, log_lik := log((count + alpha) / (n_docs + alpha * V))]
+
+  class_counts[, log_absent := log(alpha / (n_docs + alpha * V))]
+
+  if (verbose) {
+    message("classify_esco_to_cpi: vocabulary size = ", V)
+  }
+
+  # 7. build prediction skill profiles -----
+  pred_postings <- postings[
+    idesco_level_4 %in% unmapped_esco,
+    .(general_id, idesco_level_4)
+  ]
+  pred_skills <- merge(
+    skills[, .SD, .SDcols = c("general_id", skill_col)],
+    pred_postings,
+    by = "general_id"
+  )
+  setnames(pred_skills, skill_col, "skill")
+
+  esco_profiles <- pred_skills[,
+    .(n_docs_with_skill = uniqueN(general_id)),
+    by = .(idesco_level_4, skill)
+  ]
+
+  # 8. compute log-posteriors -----
+  scores <- merge(
+    esco_profiles,
+    skill_class[, .(cod_3, skill, log_lik)],
+    by = "skill",
+    allow.cartesian = TRUE
+  )
+  scores <- scores[,
+    .(sum_log_lik = sum(n_docs_with_skill * log_lik)),
+    by = .(idesco_level_4, cod_3)
+  ]
+
+  scores <- merge(
+    scores,
+    class_counts[, .(cod_3, log_prior, log_absent)],
+    by = "cod_3"
+  )
+  esco_n_skills <- esco_profiles[,
+    .(n_observed = uniqueN(skill)),
+    by = idesco_level_4
+  ]
+  scores <- merge(scores, esco_n_skills, by = "idesco_level_4")
+  scores[,
+    log_posterior := log_prior + sum_log_lik + (V - n_observed) * log_absent
+  ]
+
+  # 9. softmax normalization and top-k selection -----
+  scores[, max_lp := max(log_posterior), by = idesco_level_4]
+  scores[, probability := exp(log_posterior - max_lp)]
+  scores[, probability := probability / sum(probability), by = idesco_level_4]
+
+  setorder(scores, idesco_level_4, -probability)
+  scores[, rank := seq_len(.N), by = idesco_level_4]
+  result <- scores[rank <= top_k]
+
+  # 10. attach labels and metadata -----
+  cpi_labels <- unique(cpi_esco[, .(cod_3, nome_3)])
+  result <- merge(result, cpi_labels, by = "cod_3", all.x = TRUE)
+
+  posting_counts <- pred_postings[,
+    .(n_postings = uniqueN(general_id)),
+    by = idesco_level_4
+  ]
+  skill_counts <- esco_profiles[,
+    .(n_skills = uniqueN(skill)),
+    by = idesco_level_4
+  ]
+  result <- merge(result, posting_counts, by = "idesco_level_4")
+  result <- merge(result, skill_counts, by = "idesco_level_4")
+
+  result <- result[, .(
+    idesco_level_4,
+    cod_3,
+    nome_3,
+    probability,
+    rank,
+    n_postings,
+    n_skills
+  )]
+  setkeyv(result, "idesco_level_4")
+
+  if (verbose) {
+    message(
+      "classify_esco_to_cpi: classified ",
+      uniqueN(result$idesco_level_4),
+      " unmapped ESCO L4 codes"
+    )
+  }
+
+  result[]
+}

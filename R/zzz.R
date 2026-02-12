@@ -81,7 +81,21 @@ utils::globalVariables(c(
   "annunci",
   ".skill",
   ".data",
-  "tot"
+  "tot",
+  "n_docs",
+  "log_prior",
+  "count",
+  "log_lik",
+  "log_absent",
+  "n_docs_with_skill",
+  "sum_log_lik",
+  "n_observed",
+  "log_posterior",
+  "max_lp",
+  "probability",
+  "rank",
+  "n_postings",
+  "n_skills"
 ))
 
 .onLoad <- function(libname, pkgname) {
