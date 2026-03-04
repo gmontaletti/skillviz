@@ -4,7 +4,14 @@
 \alias{classify_esco_to_cpi}
 \title{Classify unmapped ESCO L4 codes to CPI groups via Naive Bayes}
 \usage{
-classify_esco_to_cpi(postings, skills, top_k = 3L, alpha = 1, verbose = TRUE)
+classify_esco_to_cpi(
+  postings,
+  skills,
+  top_k = 3L,
+  alpha = 1,
+  crosswalk = NULL,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{postings}{A data.table from \code{normalize_ojv()$postings}. Needs
@@ -18,6 +25,12 @@ classify_esco_to_cpi(postings, skills, top_k = 3L, alpha = 1, verbose = TRUE)
 (default: 3).}
 
 \item{alpha}{Numeric, Laplace smoothing parameter (default: 1.0).}
+
+\item{crosswalk}{Optional data.table with an \code{idesco_level_4} column
+representing the official ESCO-to-CPI mapping (e.g. from
+\code{build_cpi_esco_crosswalk()}). When provided, "unmapped" ESCO L4 codes
+are those \strong{not} in \code{crosswalk$idesco_level_4}. When NULL (default),
+the function falls back to deriving the mapping from the postings.}
 
 \item{verbose}{Logical, print progress messages (default: TRUE).}
 }
@@ -40,6 +53,13 @@ The crosswalk between ESCO L4 and CPI groups is derived directly from
 the postings via majority vote on the \code{cp2021_id_level_3} column.
 Training data comes from postings with a non-missing CP2021 code;
 prediction uses the skill profile of unmapped postings.
+}
+\details{
+When \code{crosswalk} is supplied, "unmapped" means ESCO L4 codes present in
+postings but absent from \code{crosswalk$idesco_level_4} (the official
+crosswalk). This typically yields more unmapped codes than the default
+behaviour, which considers any code with at least one non-empty
+\code{cp2021_id_level_3} posting as mapped.
 }
 \examples{
 postings <- data.table::data.table(

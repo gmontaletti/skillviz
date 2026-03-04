@@ -22,7 +22,8 @@
       "Bash(for f in /Users/giampaolomontaletti/Documents/annunci/*.zip)",
       "Bash(do echo \"=== $f ===\")",
       "Bash(unzip:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(ls:*)"
     ]
   }
 }

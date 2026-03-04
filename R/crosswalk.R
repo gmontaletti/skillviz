@@ -206,6 +206,12 @@ prepare_annunci_geography <- function(
 #' Training data comes from postings with a non-missing CP2021 code;
 #' prediction uses the skill profile of unmapped postings.
 #'
+#' When `crosswalk` is supplied, "unmapped" means ESCO L4 codes present in
+#' postings but absent from `crosswalk$idesco_level_4` (the official
+#' crosswalk). This typically yields more unmapped codes than the default
+#' behaviour, which considers any code with at least one non-empty
+#' `cp2021_id_level_3` posting as mapped.
+#'
 #' @param postings A data.table from `normalize_ojv()$postings`. Needs
 #'   `general_id`, `idesco_level_4`, `cp2021_id_level_3`, and
 #'   `cp2021_level_3`.
@@ -214,6 +220,11 @@ prepare_annunci_geography <- function(
 #' @param top_k Integer, number of top CPI predictions per ESCO L4 code
 #'   (default: 3).
 #' @param alpha Numeric, Laplace smoothing parameter (default: 1.0).
+#' @param crosswalk Optional data.table with an `idesco_level_4` column
+#'   representing the official ESCO-to-CPI mapping (e.g. from
+#'   `build_cpi_esco_crosswalk()`). When provided, "unmapped" ESCO L4 codes
+#'   are those **not** in `crosswalk$idesco_level_4`. When NULL (default),
+#'   the function falls back to deriving the mapping from the postings.
 #' @param verbose Logical, print progress messages (default: TRUE).
 #' @return A data.table keyed on `idesco_level_4` with columns:
 #'   \describe{
@@ -245,6 +256,7 @@ classify_esco_to_cpi <- function(
   skills,
   top_k = 3L,
   alpha = 1.0,
+  crosswalk = NULL,
   verbose = TRUE
 ) {
   # 1. input validation -----
@@ -286,9 +298,18 @@ classify_esco_to_cpi <- function(
     c("cod_3", "nome_3")
   )
 
-  mapped_esco <- esco_cpi_lookup[, unique(idesco_level_4)]
   all_esco <- postings[, unique(idesco_level_4)]
-  unmapped_esco <- setdiff(all_esco, mapped_esco)
+
+  if (!is.null(crosswalk)) {
+    # Use official crosswalk as reference: unmapped = not in crosswalk
+    ref_esco <- unique(crosswalk$idesco_level_4)
+    unmapped_esco <- setdiff(all_esco, ref_esco)
+    mapped_esco <- intersect(all_esco, ref_esco)
+  } else {
+    # Default: derive mapping from postings majority vote
+    mapped_esco <- esco_cpi_lookup[, unique(idesco_level_4)]
+    unmapped_esco <- setdiff(all_esco, mapped_esco)
+  }
 
   if (verbose) {
     message(
