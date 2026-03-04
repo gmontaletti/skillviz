@@ -10,7 +10,14 @@ prediction uses the skill profile of unmapped postings.
 ## Usage
 
 ``` r
-classify_esco_to_cpi(postings, skills, top_k = 3L, alpha = 1, verbose = TRUE)
+classify_esco_to_cpi(
+  postings,
+  skills,
+  top_k = 3L,
+  alpha = 1,
+  crosswalk = NULL,
+  verbose = TRUE
+)
 ```
 
 ## Arguments
@@ -32,6 +39,15 @@ classify_esco_to_cpi(postings, skills, top_k = 3L, alpha = 1, verbose = TRUE)
 - alpha:
 
   Numeric, Laplace smoothing parameter (default: 1.0).
+
+- crosswalk:
+
+  Optional data.table with an `idesco_level_4` column representing the
+  official ESCO-to-CPI mapping (e.g. from
+  [`build_cpi_esco_crosswalk()`](https://gmontaletti.github.io/skillviz/reference/build_cpi_esco_crosswalk.md)).
+  When provided, "unmapped" ESCO L4 codes are those **not** in
+  `crosswalk$idesco_level_4`. When NULL (default), the function falls
+  back to deriving the mapping from the postings.
 
 - verbose:
 
@@ -68,6 +84,14 @@ A data.table keyed on `idesco_level_4` with columns:
 - n_skills:
 
   Number of distinct skills observed for this ESCO L4.
+
+## Details
+
+When `crosswalk` is supplied, "unmapped" means ESCO L4 codes present in
+postings but absent from `crosswalk$idesco_level_4` (the official
+crosswalk). This typically yields more unmapped codes than the default
+behaviour, which considers any code with at least one non-empty
+`cp2021_id_level_3` posting as mapped.
 
 ## Examples
 

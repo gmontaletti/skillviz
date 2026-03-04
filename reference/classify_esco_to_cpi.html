@@ -54,7 +54,14 @@ prediction uses the skill profile of unmapped postings.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">classify_esco_to_cpi</span><span class="op">(</span><span class="va">postings</span>, <span class="va">skills</span>, top_k <span class="op">=</span> <span class="fl">3L</span>, alpha <span class="op">=</span> <span class="fl">1</span>, verbose <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">classify_esco_to_cpi</span><span class="op">(</span></span>
+<span>  <span class="va">postings</span>,</span>
+<span>  <span class="va">skills</span>,</span>
+<span>  top_k <span class="op">=</span> <span class="fl">3L</span>,</span>
+<span>  alpha <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  crosswalk <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -79,6 +86,14 @@ prediction uses the skill profile of unmapped postings.</p>
 
 <dt id="arg-alpha">alpha<a class="anchor" aria-label="anchor" href="#arg-alpha"></a></dt>
 <dd><p>Numeric, Laplace smoothing parameter (default: 1.0).</p></dd>
+
+
+<dt id="arg-crosswalk">crosswalk<a class="anchor" aria-label="anchor" href="#arg-crosswalk"></a></dt>
+<dd><p>Optional data.table with an <code>idesco_level_4</code> column
+representing the official ESCO-to-CPI mapping (e.g. from
+<code><a href="build_cpi_esco_crosswalk.html">build_cpi_esco_crosswalk()</a></code>). When provided, "unmapped" ESCO L4 codes
+are those <strong>not</strong> in <code>crosswalk$idesco_level_4</code>. When NULL (default),
+the function falls back to deriving the mapping from the postings.</p></dd>
 
 
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
@@ -110,6 +125,14 @@ prediction uses the skill profile of unmapped postings.</p>
 
 
 </dl></div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>When <code>crosswalk</code> is supplied, "unmapped" means ESCO L4 codes present in
+postings but absent from <code>crosswalk$idesco_level_4</code> (the official
+crosswalk). This typically yields more unmapped codes than the default
+behaviour, which considers any code with at least one non-empty
+<code>cp2021_id_level_3</code> posting as mapped.</p>
+    </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
