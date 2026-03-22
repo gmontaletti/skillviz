@@ -95,7 +95,14 @@ utils::globalVariables(c(
   "probability",
   "rank",
   "n_postings",
-  "n_skills"
+  "n_skills",
+  "group",
+  "cp2021_id_level_4",
+  "cp4",
+  "idsector",
+  "method",
+  "w",
+  "wt"
 ))
 
 .onLoad <- function(libname, pkgname) {

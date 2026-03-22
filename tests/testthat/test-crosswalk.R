@@ -164,3 +164,101 @@ test_that("prepare_annunci_esco errors on missing columns in esco_mapping", {
     "missing required columns"
   )
 })
+
+# 3. predict_cp4_knn -----
+
+test_that("predict_cp4_knn returns predictions for unlabeled rows", {
+  postings <- data.table::data.table(
+    general_id = as.character(1:20),
+    idesco_level_4 = rep(c(1000L, 2000L), each = 10),
+    cp2021_id_level_4 = c(
+      rep("1.1.1.1", 4),
+      rep("1.1.1.2", 3),
+      rep(NA, 3),
+      rep("2.2.2.1", 5),
+      rep("2.2.2.2", 2),
+      rep(NA, 3)
+    ),
+    idsector = rep(c("C", "F"), each = 10)
+  )
+  set.seed(42)
+  skills <- data.table::data.table(
+    general_id = as.character(rep(1:20, each = 3)),
+    escoskill_level_3 = paste0("s", sample(1:8, 60, replace = TRUE))
+  )
+  result <- predict_cp4_knn(postings, skills, k = 3L, verbose = FALSE)
+  expect_s3_class(result, "data.table")
+  expect_true(all(
+    c("general_id", "cp2021_id_level_4", "confidence", "method") %in%
+      names(result)
+  ))
+  expect_equal(nrow(result), 6L)
+  expect_true(all(
+    result$method %in% c("knn", "frequency", "single_candidate", "no_match")
+  ))
+})
+
+test_that("predict_cp4_knn handles single-candidate ESCO groups", {
+  postings <- data.table::data.table(
+    general_id = as.character(1:5),
+    idesco_level_4 = rep(1000L, 5),
+    cp2021_id_level_4 = c("1.1.1.1", "1.1.1.1", "1.1.1.1", NA, NA)
+  )
+  skills <- data.table::data.table(
+    general_id = as.character(rep(1:5, each = 2)),
+    escoskill_level_3 = paste0("s", 1:10)
+  )
+  result <- predict_cp4_knn(postings, skills, k = 3L, verbose = FALSE)
+  expect_equal(result$method, rep("single_candidate", 2))
+  expect_equal(result$cp2021_id_level_4, rep("1.1.1.1", 2))
+})
+
+test_that("predict_cp4_knn works without idsector column", {
+  postings <- data.table::data.table(
+    general_id = as.character(1:10),
+    idesco_level_4 = rep(1000L, 10),
+    cp2021_id_level_4 = c(
+      rep("1.1.1.1", 4),
+      rep("1.1.1.2", 3),
+      rep(NA, 3)
+    )
+  )
+  set.seed(42)
+  skills <- data.table::data.table(
+    general_id = as.character(rep(1:10, each = 3)),
+    escoskill_level_3 = paste0("s", sample(1:6, 30, replace = TRUE))
+  )
+  expect_no_error(
+    predict_cp4_knn(postings, skills, k = 3L, verbose = FALSE)
+  )
+})
+
+test_that("predict_cp4_knn returns empty table when no unlabeled rows", {
+  postings <- data.table::data.table(
+    general_id = as.character(1:3),
+    idesco_level_4 = rep(1000L, 3),
+    cp2021_id_level_4 = rep("1.1.1.1", 3)
+  )
+  skills <- data.table::data.table(
+    general_id = as.character(rep(1:3, each = 2)),
+    escoskill_level_3 = paste0("s", 1:6)
+  )
+  result <- predict_cp4_knn(postings, skills, verbose = FALSE)
+  expect_equal(nrow(result), 0L)
+})
+
+test_that("predict_cp4_knn handles ESCO not in training", {
+  postings <- data.table::data.table(
+    general_id = as.character(1:4),
+    idesco_level_4 = c(1000L, 1000L, 9999L, 9999L),
+    cp2021_id_level_4 = c("1.1.1.1", "1.1.1.1", NA, NA)
+  )
+  skills <- data.table::data.table(
+    general_id = as.character(rep(1:4, each = 2)),
+    escoskill_level_3 = paste0("s", 1:8)
+  )
+  result <- predict_cp4_knn(postings, skills, k = 3L, verbose = FALSE)
+  no_match <- result[method == "no_match"]
+  expect_equal(nrow(no_match), 2L)
+  expect_true(all(is.na(no_match$cp2021_id_level_4)))
+})

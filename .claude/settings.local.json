@@ -23,7 +23,9 @@
       "Bash(do echo \"=== $f ===\")",
       "Bash(unzip:*)",
       "Bash(done)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(zip:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

@@ -479,3 +479,389 @@ classify_esco_to_cpi <- function(
 
   result[]
 }
+
+
+# 4. Jaccard k-NN helper -----
+
+#' Jaccard k-NN vote for a single ESCO group
+#'
+#' Computes pairwise Jaccard similarity between test and train announcements
+#' using sparse binary skill vectors, selects k nearest neighbors, and
+#' performs a weighted vote with optional sector boosting.
+#'
+#' @param test_gids Character vector of test announcement IDs.
+#' @param test_skills data.table with `general_id`, `escoskill_level_3`.
+#' @param train_skills data.table with `general_id`, `escoskill_level_3`,
+#'   `cp2021_id_level_4`.
+#' @param skill_levels Character vector of all skill codes in this group.
+#' @param test_sectors Character vector parallel to `test_gids` with sector
+#'   codes (NA allowed).
+#' @param train_sectors Character vector parallel to unique train general_ids
+#'   with sector codes (NA allowed). NULL disables sector boosting.
+#' @param freq_cp4 Character: frequency cascade fallback CP4 code.
+#' @param k Integer: number of neighbors.
+#' @param sector_boost Numeric: multiplier for same-sector neighbors.
+#'
+#' @return data.table with columns `general_id`, `cp2021_id_level_4`,
+#'   `confidence`, `method`.
+#' @keywords internal
+.jaccard_knn_vote <- function(
+  test_gids,
+  test_skills,
+  train_skills,
+  skill_levels,
+  test_sectors,
+  train_sectors,
+  freq_cp4,
+  k,
+  sector_boost
+) {
+  # 4a. Edge case: no skills -----
+  if (
+    nrow(test_skills) == 0L ||
+      nrow(train_skills) == 0L ||
+      length(skill_levels) == 0L
+  ) {
+    return(data.table::data.table(
+      general_id = test_gids,
+      cp2021_id_level_4 = freq_cp4,
+      confidence = 0.1,
+      method = "frequency"
+    ))
+  }
+
+  # 4b. Build sparse matrices -----
+  train_gids <- unique(train_skills$general_id)
+
+  .to_sparse <- function(gids, sk_dt) {
+    sk <- unique(sk_dt[general_id %in% gids, .(general_id, escoskill_level_3)])
+    if (nrow(sk) == 0L) {
+      return(NULL)
+    }
+    gf <- factor(sk$general_id, levels = gids)
+    sf <- factor(sk$escoskill_level_3, levels = skill_levels)
+    Matrix::sparseMatrix(
+      i = as.integer(gf),
+      j = as.integer(sf),
+      x = 1,
+      dims = c(length(gids), length(skill_levels)),
+      dimnames = list(gids, skill_levels)
+    )
+  }
+
+  test_mat <- .to_sparse(test_gids, test_skills)
+  train_mat <- .to_sparse(train_gids, train_skills)
+
+  if (is.null(test_mat) || is.null(train_mat)) {
+    return(data.table::data.table(
+      general_id = test_gids,
+      cp2021_id_level_4 = freq_cp4,
+      confidence = 0.1,
+      method = "frequency"
+    ))
+  }
+
+  # 4c. Jaccard similarity -----
+  intersection <- as.matrix(Matrix::tcrossprod(test_mat, train_mat))
+  rs_test <- Matrix::rowSums(test_mat)
+  rs_train <- Matrix::rowSums(train_mat)
+  union_mat <- outer(rs_test, rs_train, "+") - intersection
+  union_mat[union_mat == 0] <- 1
+  jac <- intersection / union_mat
+
+  # 4d. CP4 lookup for train rows -----
+  lu <- unique(train_skills[, .(general_id, cp2021_id_level_4)])
+  tcp4 <- lu[match(train_gids, general_id), cp2021_id_level_4]
+  actual_k <- min(k, ncol(jac))
+
+  # 4e. Weighted k-NN vote -----
+  out <- vector("list", length(test_gids))
+  for (j in seq_along(test_gids)) {
+    sims <- jac[j, ]
+    idx <- order(sims, decreasing = TRUE)[seq_len(actual_k)]
+    ts <- sims[idx]
+    tc <- tcp4[idx]
+    valid <- !is.na(tc) & ts > 0
+
+    if (!any(valid)) {
+      out[[j]] <- data.table::data.table(
+        general_id = test_gids[j],
+        cp2021_id_level_4 = freq_cp4,
+        confidence = 0.1,
+        method = "frequency"
+      )
+      next
+    }
+
+    # Apply sector boost
+    boosted <- ts
+    if (sector_boost != 1.0 && !is.null(train_sectors)) {
+      my_sect <- test_sectors[j]
+      if (!is.na(my_sect)) {
+        same <- train_sectors[idx] == my_sect & !is.na(train_sectors[idx])
+        boosted[same] <- boosted[same] * sector_boost
+      }
+    }
+
+    va <- data.table::data.table(cp4 = tc[valid], w = boosted[valid])
+    va <- va[, .(wt = sum(w)), by = cp4]
+    winner <- va[which.max(wt)]
+    out[[j]] <- data.table::data.table(
+      general_id = test_gids[j],
+      cp2021_id_level_4 = winner$cp4,
+      confidence = winner$wt / sum(boosted[valid]),
+      method = "knn"
+    )
+  }
+
+  data.table::rbindlist(out)
+}
+
+
+# 5. predict_cp4_knn -----
+
+#' Predict CP2021 level-4 codes via sector-boosted Jaccard k-NN
+#'
+#' Assigns CP2021 level-4 profession codes to unlabeled job announcements
+#' using a two-step approach: (1) restrict candidates to CP4 codes observed
+#' in labeled data for the same ESCO level-4 code (de facto crosswalk),
+#' (2) disambiguate via Jaccard k-NN on binary skill vectors, with optional
+#' sector boosting that gives higher weight to same-sector neighbors.
+#'
+#' @param postings A data.table with columns: `general_id` (character),
+#'   `idesco_level_4` (integer or character), `cp2021_id_level_4` (character,
+#'   NA for unlabeled rows). Optionally includes `idsector` (character) for
+#'   sector boosting.
+#' @param skills A data.table with columns: `general_id` (character),
+#'   `escoskill_level_3` (character).
+#' @param k Integer number of nearest neighbors (default 7).
+#' @param sector_boost Numeric multiplier for same-sector neighbors in the
+#'   weighted vote. Set to 1.0 to disable sector boosting (default 3.0).
+#' @param verbose Logical: print progress messages (default TRUE).
+#'
+#' @return A data.table with columns:
+#'   \describe{
+#'     \item{general_id}{Announcement identifier.}
+#'     \item{cp2021_id_level_4}{Predicted CP2021 level-4 code.}
+#'     \item{confidence}{Weighted vote share of the winning class (0--1).}
+#'     \item{method}{One of `"knn"`, `"frequency"`, `"single_candidate"`,
+#'       `"no_match"`.}
+#'   }
+#'
+#' @details
+#' The function splits `postings` into labeled (non-NA `cp2021_id_level_4`)
+#' and unlabeled rows. Labeled data serves as the training set. For each
+#' unlabeled announcement:
+#'
+#' 1. The ESCO level-4 code restricts the CP4 candidate space to codes
+#'    observed in labeled data (de facto crosswalk).
+#' 2. If only one candidate exists, assign it directly
+#'    (`method = "single_candidate"`).
+#' 3. Otherwise, compute Jaccard similarity between the announcement's
+#'    binary skill vector and all labeled announcements in the same ESCO
+#'    group. Select the k nearest neighbors and apply a weighted vote, where
+#'    same-sector neighbors receive a `sector_boost` multiplier.
+#' 4. If no skills are available, fall back to the modal CP4 for that ESCO
+#'    code (`method = "frequency"`).
+#' 5. If the ESCO code is not present in labeled data, return NA
+#'    (`method = "no_match"`).
+#'
+#' Validated on 2025 OJA data (80/20 stratified split): CP4 accuracy 83.0%
+#' with k=7 and sector_boost=3.0, vs 62.6% frequency baseline.
+#'
+#' @seealso [classify_esco_to_cpi()] for Naive Bayes classification of
+#'   ESCO-to-CPI3 mapping.
+#'
+#' @examples
+#' postings <- data.table::data.table(
+#'   general_id = as.character(1:10),
+#'   idesco_level_4 = rep(c(1000L, 2000L), each = 5),
+#'   cp2021_id_level_4 = c("1.1.1.1", "1.1.1.2", "1.1.1.1", NA, NA,
+#'                          "2.2.2.1", "2.2.2.1", "2.2.2.2", NA, NA),
+#'   idsector = rep(c("C", "F"), each = 5)
+#' )
+#' skills <- data.table::data.table(
+#'   general_id = as.character(c(1,1,2,2,3,3,4,4,5,5,
+#'                                6,6,7,7,8,8,9,9,10,10)),
+#'   escoskill_level_3 = c("s1","s2","s2","s3","s1","s2","s1","s3","s2","s3",
+#'                          "s4","s5","s4","s5","s5","s6","s4","s6","s5","s6")
+#' )
+#' result <- predict_cp4_knn(postings, skills, k = 3L, sector_boost = 1.0)
+#'
+#' @export
+predict_cp4_knn <- function(
+  postings,
+  skills,
+  k = 7L,
+  sector_boost = 3.0,
+  verbose = TRUE
+) {
+  # 5a. Input validation -----
+  check_columns(
+    postings,
+    c("general_id", "idesco_level_4", "cp2021_id_level_4"),
+    caller = "predict_cp4_knn"
+  )
+  check_columns(
+    skills,
+    c("general_id", "escoskill_level_3"),
+    caller = "predict_cp4_knn"
+  )
+
+  has_sector <- "idsector" %in% names(postings)
+  if (!has_sector && sector_boost != 1.0) {
+    if (verbose) {
+      message("predict_cp4_knn: idsector not found, sector boost disabled")
+    }
+    sector_boost <- 1.0
+  }
+
+  # 5b. Split labeled / unlabeled -----
+  dt <- data.table::copy(postings)
+  dt[, general_id := as.character(general_id)]
+  skills_dt <- data.table::copy(skills)
+  skills_dt[, general_id := as.character(general_id)]
+
+  labeled <- dt[!is.na(cp2021_id_level_4) & nzchar(cp2021_id_level_4)]
+  unlabeled <- dt[is.na(cp2021_id_level_4) | !nzchar(cp2021_id_level_4)]
+
+  if (nrow(unlabeled) == 0L) {
+    if (verbose) {
+      message("predict_cp4_knn: no unlabeled rows, returning empty table")
+    }
+    return(data.table::data.table(
+      general_id = character(0),
+      cp2021_id_level_4 = character(0),
+      confidence = numeric(0),
+      method = character(0)
+    ))
+  }
+
+  if (verbose) {
+    message(sprintf(
+      "predict_cp4_knn: %d labeled, %d unlabeled",
+      nrow(labeled),
+      nrow(unlabeled)
+    ))
+  }
+
+  # 5c. Build de facto crosswalk -----
+  esco_cp4 <- labeled[, .N, by = .(idesco_level_4, cp2021_id_level_4)]
+  data.table::setorder(esco_cp4, idesco_level_4, -N)
+  esco_mode <- esco_cp4[, .SD[1], by = idesco_level_4]
+  esco_candidates <- esco_cp4[, .(n_cand = .N), by = idesco_level_4]
+
+  # 5d. Merge skills with labeled data -----
+  train_skills <- merge(
+    skills_dt,
+    labeled[, .(general_id, cp2021_id_level_4, idesco_level_4)],
+    by = "general_id"
+  )
+  test_skills <- skills_dt[general_id %in% unlabeled$general_id]
+
+  # 5e. Process ESCO groups -----
+  processable <- intersect(
+    unique(unlabeled$idesco_level_4[!is.na(unlabeled$idesco_level_4)]),
+    unique(labeled$idesco_level_4)
+  )
+
+  no_match_gids <- unlabeled[
+    is.na(idesco_level_4) | !idesco_level_4 %in% processable,
+    general_id
+  ]
+
+  results <- vector("list", length(processable) + 2L)
+  ri <- 0L
+
+  if (length(no_match_gids) > 0L) {
+    ri <- ri + 1L
+    results[[ri]] <- data.table::data.table(
+      general_id = no_match_gids,
+      cp2021_id_level_4 = NA_character_,
+      confidence = 0,
+      method = "no_match"
+    )
+  }
+
+  # Sector lookups
+  if (has_sector) {
+    train_sector_lu <- labeled[, .(general_id, idsector)]
+    test_sector_lu <- unlabeled[, .(general_id, idsector)]
+  }
+
+  n_processed <- 0L
+  for (esco in processable) {
+    test_gids <- unlabeled[idesco_level_4 == esco, general_id]
+    if (length(test_gids) == 0L) {
+      next
+    }
+
+    freq_cp4 <- esco_mode[idesco_level_4 == esco, cp2021_id_level_4]
+    n_cand <- esco_candidates[idesco_level_4 == esco, n_cand]
+
+    # Single candidate: direct assignment
+    if (n_cand == 1L) {
+      ri <- ri + 1L
+      results[[ri]] <- data.table::data.table(
+        general_id = test_gids,
+        cp2021_id_level_4 = freq_cp4,
+        confidence = 1.0,
+        method = "single_candidate"
+      )
+      next
+    }
+
+    # Get skills for this ESCO group
+    trsk <- train_skills[idesco_level_4 == esco]
+    tsk <- test_skills[general_id %in% test_gids]
+    local_skills <- sort(unique(c(
+      tsk$escoskill_level_3,
+      trsk$escoskill_level_3
+    )))
+
+    # Sector vectors
+    if (has_sector && sector_boost != 1.0) {
+      tsect <- test_sector_lu[match(test_gids, general_id), idsector]
+      train_gids_esco <- unique(trsk$general_id)
+      trsect <- train_sector_lu[match(train_gids_esco, general_id), idsector]
+    } else {
+      tsect <- rep(NA_character_, length(test_gids))
+      trsect <- NULL
+    }
+
+    ri <- ri + 1L
+    results[[ri]] <- .jaccard_knn_vote(
+      test_gids = test_gids,
+      test_skills = tsk,
+      train_skills = trsk,
+      skill_levels = local_skills,
+      test_sectors = tsect,
+      train_sectors = trsect,
+      freq_cp4 = freq_cp4,
+      k = k,
+      sector_boost = sector_boost
+    )
+
+    n_processed <- n_processed + 1L
+    if (verbose && n_processed %% 100L == 0L) {
+      message(sprintf(
+        "  %d / %d ESCO groups",
+        n_processed,
+        length(processable)
+      ))
+    }
+  }
+
+  result <- data.table::rbindlist(results[seq_len(ri)], use.names = TRUE)
+
+  if (verbose) {
+    msg <- result[, .N, by = method]
+    message(sprintf(
+      "predict_cp4_knn: %d predictions (%s)",
+      nrow(result),
+      paste(sprintf("%s=%d", msg$method, msg$N), collapse = ", ")
+    ))
+  }
+
+  result[]
+}
