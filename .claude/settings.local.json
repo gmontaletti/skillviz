@@ -25,7 +25,8 @@
       "Bash(done)",
       "Bash(ls:*)",
       "Bash(zip:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git remote:*)"
     ]
   }
 }

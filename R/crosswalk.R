@@ -561,57 +561,70 @@ classify_esco_to_cpi <- function(
     ))
   }
 
-  # 4c. Jaccard similarity -----
-  intersection <- as.matrix(Matrix::tcrossprod(test_mat, train_mat))
+  # 4c. Precompute row sums and CP4 lookup -----
   rs_test <- Matrix::rowSums(test_mat)
   rs_train <- Matrix::rowSums(train_mat)
-  union_mat <- outer(rs_test, rs_train, "+") - intersection
-  union_mat[union_mat == 0] <- 1
-  jac <- intersection / union_mat
 
-  # 4d. CP4 lookup for train rows -----
   lu <- unique(train_skills[, .(general_id, cp2021_id_level_4)])
   tcp4 <- lu[match(train_gids, general_id), cp2021_id_level_4]
-  actual_k <- min(k, ncol(jac))
+  actual_k <- min(k, length(train_gids))
 
-  # 4e. Weighted k-NN vote -----
-  out <- vector("list", length(test_gids))
-  for (j in seq_along(test_gids)) {
-    sims <- jac[j, ]
-    idx <- order(sims, decreasing = TRUE)[seq_len(actual_k)]
-    ts <- sims[idx]
-    tc <- tcp4[idx]
-    valid <- !is.na(tc) & ts > 0
+  # 4d. Batched Jaccard k-NN vote -----
+  # Process test rows in batches to avoid dense matrix OOM on large groups
+  batch_size <- max(1L, as.integer(5e8 / length(train_gids)))
+  n_test <- length(test_gids)
+  out <- vector("list", n_test)
+  oi <- 0L
 
-    if (!any(valid)) {
-      out[[j]] <- data.table::data.table(
-        general_id = test_gids[j],
-        cp2021_id_level_4 = freq_cp4,
-        confidence = 0.1,
-        method = "frequency"
-      )
-      next
-    }
+  for (b_start in seq(1L, n_test, by = batch_size)) {
+    b_end <- min(b_start + batch_size - 1L, n_test)
+    b_idx <- b_start:b_end
 
-    # Apply sector boost
-    boosted <- ts
-    if (sector_boost != 1.0 && !is.null(train_sectors)) {
-      my_sect <- test_sectors[j]
-      if (!is.na(my_sect)) {
-        same <- train_sectors[idx] == my_sect & !is.na(train_sectors[idx])
-        boosted[same] <- boosted[same] * sector_boost
-      }
-    }
-
-    va <- data.table::data.table(cp4 = tc[valid], w = boosted[valid])
-    va <- va[, .(wt = sum(w)), by = cp4]
-    winner <- va[which.max(wt)]
-    out[[j]] <- data.table::data.table(
-      general_id = test_gids[j],
-      cp2021_id_level_4 = winner$cp4,
-      confidence = winner$wt / sum(boosted[valid]),
-      method = "knn"
+    intersection <- as.matrix(
+      Matrix::tcrossprod(test_mat[b_idx, , drop = FALSE], train_mat)
     )
+    union_batch <- outer(rs_test[b_idx], rs_train, "+") - intersection
+    union_batch[union_batch == 0] <- 1
+    jac_batch <- intersection / union_batch
+
+    for (j in seq_len(nrow(jac_batch))) {
+      oi <- oi + 1L
+      sims <- jac_batch[j, ]
+      idx <- order(sims, decreasing = TRUE)[seq_len(actual_k)]
+      ts <- sims[idx]
+      tc <- tcp4[idx]
+      valid <- !is.na(tc) & ts > 0
+
+      if (!any(valid)) {
+        out[[oi]] <- data.table::data.table(
+          general_id = test_gids[oi],
+          cp2021_id_level_4 = freq_cp4,
+          confidence = 0.1,
+          method = "frequency"
+        )
+        next
+      }
+
+      # Apply sector boost
+      boosted <- ts
+      if (sector_boost != 1.0 && !is.null(train_sectors)) {
+        my_sect <- test_sectors[oi]
+        if (!is.na(my_sect)) {
+          same <- train_sectors[idx] == my_sect & !is.na(train_sectors[idx])
+          boosted[same] <- boosted[same] * sector_boost
+        }
+      }
+
+      va <- data.table::data.table(cp4 = tc[valid], w = boosted[valid])
+      va <- va[, .(wt = sum(w)), by = cp4]
+      winner <- va[which.max(wt)]
+      out[[oi]] <- data.table::data.table(
+        general_id = test_gids[oi],
+        cp2021_id_level_4 = winner$cp4,
+        confidence = winner$wt / sum(boosted[valid]),
+        method = "knn"
+      )
+    }
   }
 
   data.table::rbindlist(out)
