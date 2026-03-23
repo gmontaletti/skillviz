@@ -10,6 +10,7 @@
 <url><loc>https://gmontaletti.github.io/skillviz/index.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_cpi_esco_crosswalk.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_profession_skill_profile.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/build_skill_prof_sparse.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_skillist.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/check_columns.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/check_suggests.html</loc></url>
@@ -17,12 +18,15 @@
 <url><loc>https://gmontaletti.github.io/skillviz/reference/cluster_professions.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/compute_balassa_index.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/compute_cooc_matrix.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/compute_cosine_similarity.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/compute_decomposed_distance.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/compute_idf_classification.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/compute_profession_distance.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/compute_salary_by_period.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/compute_salary_by_skill.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/compute_skill_diffusion.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/compute_skill_ranking_series.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/compute_skill_similarity.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/compute_skill_variation.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/compute_source_features.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/cooc_all_professions.html</loc></url>
@@ -30,6 +34,7 @@
 <url><loc>https://gmontaletti.github.io/skillviz/reference/deduplicate_annunci.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/detect_skill_communities.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/dot-cooc_single.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/dot-jaccard_knn_vote.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/extract_salary_data.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/extract_specific_skills_cpi3.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/filter_annunci_by_source.html</loc></url>
@@ -41,6 +46,7 @@
 <url><loc>https://gmontaletti.github.io/skillviz/reference/parse_ymd_columns.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/plot_cooc_graph.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/plot_skill_ranking.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/predict_cp4_knn.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/prepare_annunci_esco.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/prepare_annunci_geography.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/prepare_source_tsibble.html</loc></url>

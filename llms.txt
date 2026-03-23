@@ -111,6 +111,8 @@ Build crosswalk tables between CPI, ESCO, and CP2021 classifications.
   : Prepare announcements with CPI geographic dimension
 - [`classify_esco_to_cpi()`](https://gmontaletti.github.io/skillviz/reference/classify_esco_to_cpi.md)
   : Classify unmapped ESCO L4 codes to CPI groups via Naive Bayes
+- [`predict_cp4_knn()`](https://gmontaletti.github.io/skillviz/reference/predict_cp4_knn.md)
+  : Predict CP2021 level-4 codes via sector-boosted Jaccard k-NN
 
 ## Skill Relevance Analysis
 
@@ -150,6 +152,14 @@ Identify skill communities within co-occurrence networks.
 
 Compute pairwise profession distances and hierarchical clustering.
 
+- [`build_skill_prof_sparse()`](https://gmontaletti.github.io/skillviz/reference/build_skill_prof_sparse.md)
+  : Build a sparse skill-profession matrix
+- [`compute_cosine_similarity()`](https://gmontaletti.github.io/skillviz/reference/compute_cosine_similarity.md)
+  : Pairwise cosine similarity between matrix columns
+- [`compute_decomposed_distance()`](https://gmontaletti.github.io/skillviz/reference/compute_decomposed_distance.md)
+  : Squared Euclidean distance decomposed by skill subsets
+- [`compute_skill_similarity()`](https://gmontaletti.github.io/skillviz/reference/compute_skill_similarity.md)
+  : Skill-skill cosine similarity based on profession profiles
 - [`compute_profession_distance()`](https://gmontaletti.github.io/skillviz/reference/compute_profession_distance.md)
   : Compute pairwise distances between professions based on skill
   profiles
