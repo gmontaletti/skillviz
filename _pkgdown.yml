@@ -37,6 +37,7 @@ reference:
       - prepare_annunci_esco
       - prepare_annunci_geography
       - classify_esco_to_cpi
+      - predict_cp4_knn
 
   - title: Skill Relevance Analysis
     desc: Compute specialization indices, TF-IDF diffusion scores, and skill classification.
@@ -61,6 +62,10 @@ reference:
   - title: Professional Distance and Clustering
     desc: Compute pairwise profession distances and hierarchical clustering.
     contents:
+      - build_skill_prof_sparse
+      - compute_cosine_similarity
+      - compute_decomposed_distance
+      - compute_skill_similarity
       - compute_profession_distance
       - cluster_professions
 
