@@ -561,7 +561,18 @@ classify_esco_to_cpi <- function(
     ))
   }
 
-  # 4c. Precompute row sums and CP4 lookup -----
+  # 4c. Cap train size to avoid OOM on large ESCO groups -----
+  max_train <- 50000L
+  if (length(train_gids) > max_train) {
+    sample_idx <- sample.int(length(train_gids), max_train)
+    train_gids <- train_gids[sample_idx]
+    train_mat <- train_mat[sample_idx, , drop = FALSE]
+    if (!is.null(train_sectors)) {
+      train_sectors <- train_sectors[sample_idx]
+    }
+  }
+
+  # 4d. Precompute row sums and CP4 lookup -----
   rs_test <- Matrix::rowSums(test_mat)
   rs_train <- Matrix::rowSums(train_mat)
 
@@ -571,7 +582,7 @@ classify_esco_to_cpi <- function(
 
   # 4d. Batched Jaccard k-NN vote -----
   # Process test rows in batches to avoid dense matrix OOM on large groups
-  batch_size <- max(1L, as.integer(5e8 / length(train_gids)))
+  batch_size <- max(1L, as.integer(2e8 / length(train_gids)))
   n_test <- length(test_gids)
   out <- vector("list", n_test)
   oi <- 0L

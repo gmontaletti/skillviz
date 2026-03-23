@@ -26,7 +26,9 @@
       "Bash(ls:*)",
       "Bash(zip:*)",
       "Bash(git commit:*)",
-      "Bash(git remote:*)"
+      "Bash(git remote:*)",
+      "Bash(find /Users/giampaolomontaletti/Documents/funzioni/skillviz/.github -name *.yml -o -name *.yaml)",
+      "Bash(grep -r \"compute_skill_similarity\\\\|compute_decomposed_distance\\\\|predict_cp4_knn\\\\|build_skill_prof_sparse\\\\|compute_cosine_similarity\" /Users/giampaolomontaletti/Documents/funzioni/skillviz/R/*.R)"
     ]
   }
 }
