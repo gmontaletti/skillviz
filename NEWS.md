@@ -1,5 +1,24 @@
 # skillviz (in sviluppo)
 
+## API split per scoring veloce
+
+* `match_professions_prepare()` e `match_professions_score()` separano la
+  costruzione della matrice professione × competenza (operazione costosa,
+  invariante rispetto alla query) dal calcolo della distanza rispetto a un
+  insieme di competenze dichiarate (operazione leggera, sparsa). Il wrapper
+  `match_professions()` resta invariato per backward compatibility e
+  delega a entrambi internamente. Usare il pattern split nelle interfacce
+  reattive che valutano molte query sulla stessa base.
+
+## Query pesata
+
+* `match_professions_score()` e `match_professions()` accettano l'argomento
+  `weights` (numerico, non negativo, una entry per ogni competenza
+  dichiarata). I pesi modulano la massa L2 del vettore di query; con pesi
+  uniformi a 1 il comportamento coincide bit-per-bit con la versione non
+  pesata. I denominatori di `hit_ratio` e `mean_coverage` usano la somma
+  dei pesi al quadrato per mantenere coerenza dimensionale.
+
 ## Nuove funzionalità
 
 * `match_professions()` — a partire da un vettore di identificativi ESCO L3

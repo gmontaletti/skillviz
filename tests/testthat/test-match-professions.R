@@ -406,3 +406,135 @@ test_that("le top-3 sotto basi diverse si sovrappongono (Jaccard >= 0.5)", {
   expect_gte(jaccard(top3(res_cov), top3(res_tfidf)), 0.5)
   expect_gte(jaccard(top3(res_cov), top3(res_rca)), 0.5)
 })
+
+
+# 12. round-trip prepare + score equivalente al wrapper -----
+
+test_that("prepare + score riproduce bit-equal il wrapper match_professions()", {
+  fx <- .make_match_fixture()
+  query <- c("s1", "s2", "s3")
+
+  for (b in c("coverage", "tfidf", "rca")) {
+    res_wrapper <- match_professions(
+      skills = query,
+      postings = fx$postings,
+      skills_long = fx$skills_long,
+      basis = b,
+      top_n = 10L
+    )
+
+    prep <- match_professions_prepare(
+      postings = fx$postings,
+      skills_long = fx$skills_long,
+      basis = b
+    )
+    expect_true(
+      inherits(prep, "match_professions_prep"),
+      info = paste0("basis = ", b)
+    )
+
+    res_split <- match_professions_score(
+      prep,
+      skills = query,
+      top_n = 10L
+    )
+
+    expect_equal(
+      res_wrapper$ranking,
+      res_split$ranking,
+      tolerance = 1e-12,
+      info = paste0("basis = ", b)
+    )
+    expect_equal(
+      res_wrapper$per_skill,
+      res_split$per_skill,
+      tolerance = 1e-12,
+      info = paste0("basis = ", b)
+    )
+    expect_identical(res_wrapper$basis, res_split$basis)
+    expect_identical(res_wrapper$query, res_split$query)
+  }
+})
+
+
+# 13. pesi della query: re-ranking e invarianti -----
+
+test_that("weights ri-pesano la query e preservano l'invariante di somma", {
+  fx <- .make_match_fixture()
+  query <- c("s1", "s4", "s7")
+
+  prep <- match_professions_prepare(
+    postings = fx$postings,
+    skills_long = fx$skills_long,
+    basis = "coverage"
+  )
+
+  # riferimento uniforme
+  res_u <- match_professions_score(prep, skills = query)
+
+  # variante pesata: spinge massa sulla skill di nicchia s4
+  res_w <- match_professions_score(
+    prep,
+    skills = query,
+    weights = c(0.3, 3.0, 0.3)
+  )
+
+  # il ranking complessivo deve cambiare in qualche modo (ordine o distanze)
+  expect_false(identical(res_u$ranking, res_w$ranking))
+
+  # invariante somma per ciascuna professione, anche sotto pesi
+  for (p in res_w$ranking$idesco_level_4) {
+    dist_p <- res_w$ranking[idesco_level_4 == p, distance]
+    sum_c <- sum(res_w$per_skill[idesco_level_4 == p, contribution])
+    expect_equal(sum_c, dist_p, tolerance = 1e-9)
+  }
+
+  # hit_ratio e mean_coverage devono restare in [0, 1]
+  expect_true(all(res_w$ranking$hit_ratio >= 0 & res_w$ranking$hit_ratio <= 1))
+  expect_true(
+    all(res_w$ranking$mean_coverage >= 0 & res_w$ranking$mean_coverage <= 1)
+  )
+
+  # pesi uniformi equivalgono a NULL
+  res_uw <- match_professions_score(
+    prep,
+    skills = query,
+    weights = c(1, 1, 1)
+  )
+  expect_equal(res_u$ranking, res_uw$ranking, tolerance = 1e-12)
+
+  # validazione pesi: negativi
+  expect_error(
+    match_professions_score(
+      prep,
+      skills = c("s1", "s4"),
+      weights = c(-1, 1)
+    ),
+    regexp = "non negativo"
+  )
+
+  # validazione pesi: tutti zero
+  expect_error(
+    match_professions_score(
+      prep,
+      skills = c("s1", "s4"),
+      weights = c(0, 0)
+    ),
+    regexp = "identicamente zero"
+  )
+
+  # validazione pesi: lunghezza errata
+  expect_error(
+    match_professions_score(
+      prep,
+      skills = c("s1", "s4", "s7"),
+      weights = c(1, 1)
+    )
+  )
+
+  # validazione prep: classe errata
+  expect_error(
+    match_professions_score(prep = list(), skills = c("s1")),
+    regexp = "match_professions_prep"
+  )
+})

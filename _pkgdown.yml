@@ -100,6 +100,8 @@ reference:
     desc: Rank professions by closeness to a declared skill set.
     contents:
       - match_professions
+      - match_professions_prepare
+      - match_professions_score
 
   - title: Visualization
     desc: Plot co-occurrence networks and skill ranking series.

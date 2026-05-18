@@ -119,7 +119,10 @@ utils::globalVariables(c(
   "score",
   "contribution",
   "contribution_pct",
-  "skill_label"
+  "skill_label",
+  "sum_w2",
+  "sum_cov_w2",
+  "w2"
 ))
 
 .onLoad <- function(libname, pkgname) {

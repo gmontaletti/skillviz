@@ -2,7 +2,7 @@
 % Please edit documentation in R/match_professions.R
 \name{match_professions}
 \alias{match_professions}
-\title{Classifica le professioni ESCO L4 più affini a un insieme di competenze}
+\title{Classifica le professioni ESCO L4 piu' affini a un insieme di competenze}
 \usage{
 match_professions(
   skills,
@@ -11,7 +11,8 @@ match_professions(
   basis = c("coverage", "tfidf", "rca"),
   top_n = 20L,
   min_postings = 30L,
-  skill_labels = NULL
+  skill_labels = NULL,
+  weights = NULL
 )
 }
 \arguments{
@@ -42,28 +43,36 @@ scartate prima del calcolo. Default \code{30L}.}
 Quando fornito, la tabella \code{per_skill} ottiene la colonna
 \code{skill_label}. Default \code{NULL}. Tipicamente ottenuto da
 \code{itaposts::oja_skill_dim(con) |> dplyr::collect()}.}
+
+\item{weights}{Vettore numerico non negativo di pesi per le competenze
+in \code{skills}. Se \code{NULL} (default) tutte le competenze ricevono peso
+uniforme. Quando fornito deve avere lunghezza pari a \code{length(skills)}
+dopo deduplicazione di \code{NA} e duplicati; vedi
+\code{\link[=match_professions_score]{match_professions_score()}} per i dettagli.}
 }
 \value{
 Una \code{list} con i seguenti elementi:
 \describe{
-\item{\code{ranking}}{\code{data.table} con una riga per professione (al più
+\item{\code{ranking}}{\code{data.table} con una riga per professione (al piu'
 \code{top_n}), ordinata per \code{distance} crescente. Colonne:
 \code{idesco_level_4}, \code{distance} (in \verb{[0, 1]}), \code{score = 1 - distance},
 \code{hit_ratio} (frazione delle competenze dichiarate che la
-professione richiede almeno una volta), \code{mean_coverage} (media di
+professione richiede almeno una volta; nel caso pesato e' la massa
+quadratica delle competenze matchate normalizzata sulla massa
+totale), \code{mean_coverage} (media di
 \verb{coverage_\{p,s\}} sulle competenze dichiarate; \code{NA} se
 \code{basis != "coverage"}), \code{n_postings}, \code{n_skills_matched}.}
 \item{\code{per_skill}}{\code{data.table} in formato lungo con una riga per
 ciascuna coppia (professione top-N, competenza con contributo
 non nullo). La lista delle righe include sia le competenze
 dichiarate sia quelle richieste dalla professione ma non
-dichiarate, in modo che valga l'identità additiva
+dichiarate, in modo che valga l'identita' additiva
 \code{sum(contribution) == distance} per ogni professione. Colonne:
 \code{idesco_level_4}, \code{idescoskill_level_3}, \code{skill_label}
 (\code{NA} se \code{skill_labels} non fornito), \code{declared} (logico, \code{TRUE}
-se la competenza è nella query), \code{profile_value} (valore grezzo
+se la competenza e' nella query), \code{profile_value} (valore grezzo
 di \code{v_p[s]} nella base scelta, pre-normalizzazione; \code{NA} se la
-competenza non è nell'universo della professione),
+competenza non e' nell'universo della professione),
 \code{contribution} (addendo della distanza), \code{contribution_pct}
 (\code{contribution / distance}; \code{NA} se \code{distance == 0}).}
 \item{\code{basis}}{La base usata, per introspezione.}
@@ -74,9 +83,9 @@ competenza non è nell'universo della professione),
 }
 
 Nota sull'invariante: la somma di \code{contribution} su tutte le righe di
-\code{per_skill} per una data professione coincide con \code{distance} perché
+\code{per_skill} per una data professione coincide con \code{distance} perche'
 sono incluse anche le competenze richieste dalla professione ma non
-dichiarate. Filtrando su \code{declared == TRUE} la somma sarà invece
+dichiarate. Filtrando su \code{declared == TRUE} la somma sara' invece
 inferiore a \code{distance}, e il divario rappresenta la massa che la
 professione richiede al di fuori della query.
 }
@@ -89,28 +98,35 @@ professione viene restituita la decomposizione del contributo di ciascuna
 competenza alla distanza totale.
 }
 \details{
-La distanza usata è la distanza coseno (\code{1 - cos(v_p, q)}), equivalente
-a metà della distanza euclidea quadrata fra vettori L2-normalizzati.
-Questa scelta è l'unica metrica della famiglia che fornisce una
+Questa funzione e' un wrapper sottile su
+\code{\link[=match_professions_prepare]{match_professions_prepare()}} + \code{\link[=match_professions_score]{match_professions_score()}}. Per uso ad
+alta frequenza (per esempio dashboard interattive) e' preferibile
+invocare \code{match_professions_prepare()} una sola volta per data refresh
+e chiamare \code{match_professions_score()} ad ogni interazione utente: la
+costruzione della matrice profilo e' il costo dominante.
+
+La distanza usata e' la distanza coseno (\code{1 - cos(v_p, q)}), equivalente
+a meta' della distanza euclidea quadrata fra vettori L2-normalizzati.
+Questa scelta e' l'unica metrica della famiglia che fornisce una
 decomposizione additiva pulita per singola competenza:
 \deqn{1 - \cos(v_p, q) = \frac{1}{2} \sum_s ( \tilde v_{p,s} - \tilde q_s )^2.}
 
-Il profilo \code{v_p} di ogni professione è costruito secondo la base scelta:
+Il profilo \code{v_p} di ogni professione e' costruito secondo la base scelta:
 \describe{
-\item{\code{coverage}}{\verb{n_\{p,s\} / N_p}, probabilità che un annuncio di \code{p}
+\item{\code{coverage}}{\verb{n_\{p,s\} / N_p}, probabilita' che un annuncio di \code{p}
 richieda \code{s}. Interpretabile come quota di copertura.}
 \item{\code{tfidf}}{\verb{tf_\{p,s\} * idf_s} con \verb{tf_\{p,s\} = n_\{p,s\} / sum_s n_\{p,s\}}
 calcolata internamente alla professione, e \code{idf_s = log(P / df_s)}
-dove \code{df_s} è il numero di professioni che richiedono \code{s} (dopo
+dove \code{df_s} e' il numero di professioni che richiedono \code{s} (dopo
 filtro \code{min_postings}) e \code{P} il numero totale di professioni
-superstiti. Pesa di più le competenze discriminanti.}
+superstiti. Pesa di piu' le competenze discriminanti.}
 \item{\code{rca}}{indice di Balassa, delegato a \code{\link[=compute_balassa_index]{compute_balassa_index()}}.
 Misura la specializzazione: \verb{>1} indica sovra-rappresentazione.}
 }
 
-Il vettore di query \code{q} è l'indicatore non pesato delle competenze
-dichiarate (1 per quelle presenti nell'universo, 0 altrove). Sia \code{q}
-che le colonne di \code{M} vengono L2-normalizzati prima del calcolo.
+Il vettore di query \code{q} e' costruito a partire da \code{weights} (default
+uniforme \code{1} su ogni competenza dichiarata); sia \code{q} che le colonne di
+\code{M} vengono L2-normalizzati prima del calcolo.
 }
 \examples{
 \dontrun{
@@ -121,6 +137,7 @@ post <- itaposts::oja_postings(con)  |> dplyr::collect() |> data.table::setDT()
 skil <- itaposts::oja_skills(con)    |> dplyr::collect() |> data.table::setDT()
 labs <- itaposts::oja_skill_dim(con) |> dplyr::collect() |> data.table::setDT()
 
+# convenience: end-to-end in una sola chiamata
 res <- skillviz::match_professions(
   skills       = c("S1.4.1", "S4.8.1", "S1.13.2"),
   postings     = post,
@@ -132,12 +149,23 @@ res <- skillviz::match_professions(
 
 res$ranking
 res$per_skill[idesco_level_4 == res$ranking$idesco_level_4[1L]]
+
+# prepara una volta, scoring molte volte
+prep <- skillviz::match_professions_prepare(
+  post, skil, basis = "coverage"
+)
+res1 <- skillviz::match_professions_score(prep, c("S1.4.1", "S4.8.1"))
+res2 <- skillviz::match_professions_score(
+  prep, c("S2.1.3"), weights = c(2.0)
+)
 }
 
 }
 \seealso{
-\code{\link[=compute_profession_distance]{compute_profession_distance()}} per la distanza fra
-professioni, \code{\link[=compute_balassa_index]{compute_balassa_index()}} per l'indice di Balassa usato
-dalla base \code{rca}, \code{\link[=build_skill_prof_sparse]{build_skill_prof_sparse()}} per la matrice
-competenze x professioni.
+\code{\link[=match_professions_prepare]{match_professions_prepare()}} e \code{\link[=match_professions_score]{match_professions_score()}}
+per il workflow "prepara una volta, scoring molte volte",
+\code{\link[=compute_profession_distance]{compute_profession_distance()}} per la distanza fra professioni,
+\code{\link[=compute_balassa_index]{compute_balassa_index()}} per l'indice di Balassa usato dalla base
+\code{rca}, \code{\link[=build_skill_prof_sparse]{build_skill_prof_sparse()}} per la matrice competenze x
+professioni.
 }
