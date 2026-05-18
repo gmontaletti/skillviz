@@ -102,7 +102,24 @@ utils::globalVariables(c(
   "idsector",
   "method",
   "w",
-  "wt"
+  "wt",
+  "idescoskill_level_3",
+  "N_p",
+  "value",
+  "n_ps",
+  "n_ps_aux",
+  "sum_n_p",
+  "df_s",
+  "coverage_ps",
+  "sum_cov",
+  "hit_ratio",
+  "mean_coverage",
+  "n_skills_matched",
+  "distance",
+  "score",
+  "contribution",
+  "contribution_pct",
+  "skill_label"
 ))
 
 .onLoad <- function(libname, pkgname) {

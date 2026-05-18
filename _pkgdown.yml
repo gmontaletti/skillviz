@@ -96,6 +96,11 @@ reference:
       - extract_specific_skills_cpi3
       - build_profession_skill_profile
 
+  - title: Profession Matching
+    desc: Rank professions by closeness to a declared skill set.
+    contents:
+      - match_professions
+
   - title: Visualization
     desc: Plot co-occurrence networks and skill ranking series.
     contents:
