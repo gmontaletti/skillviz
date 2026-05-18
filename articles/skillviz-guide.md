@@ -28,6 +28,7 @@ visualization and time-series features depend on suggested packages
 (ggplot2, ggraph, tsibble, etc.) that are checked at runtime.
 
 ``` r
+
 library(skillviz)
 library(data.table)
 ```
@@ -45,6 +46,7 @@ announcements (coded in ESCO) to the Italian professional
 classification.
 
 ``` r
+
 # 1. read from fst file -----
 esco_mapping <- read_esco_mapping(file = "path/to/mappa_cpv_esco_iv.fst")
 
@@ -67,6 +69,7 @@ Reads the `ISCOGroups*.csv` file from an ESCO classification dataset
 directory. This provides the hierarchical occupation structure.
 
 ``` r
+
 isco <- read_isco_groups("path/to/ESCO dataset - v1.1.1 - classification - it - csv")
 ```
 
@@ -82,6 +85,7 @@ for categorical columns (via
 and computing an activity flag.
 
 ``` r
+
 # 1. synthetic announcement data -----
 ann_raw <- data.table(
   general_id   = c(1, 1, 2, 2, 2, 3),
@@ -112,6 +116,7 @@ lookup table mapping each `idesco_level_4` to its Italian ESCO label and
 CP2021 3-digit group.
 
 ``` r
+
 # 1. synthetic inputs -----
 esco_mapping <- data.table(
   idesco_level_4 = c("E001", "E002", "E003"),
@@ -137,6 +142,7 @@ Joins announcements with the ESCO mapping to add Italian profession
 labels and parses year/month/day columns into proper `IDate` fields.
 
 ``` r
+
 # 1. synthetic announcement data -----
 ann <- data.table(
   general_id       = c(1, 2, 3),
@@ -163,6 +169,7 @@ table to add the CPI (Centro per l’Impiego) dimension, then aggregates
 unique announcement counts by CPI, profession, and year.
 
 ``` r
+
 # 1. territorial table -----
 territoriale <- data.table(
   COD_ISTAT       = c(101L, 202L, 303L),
@@ -191,13 +198,16 @@ The **Balassa index** (also known as Revealed Comparative Advantage,
 RCA) is a standard measure from international trade economics, adapted
 here to skill analysis. For a profession-skill pair, the index computes:
 
-$$B = \frac{N_{skill,prof}/N_{prof}}{N_{skill,all}/N_{all}}$$
+``` math
+B = \frac{N_{skill,prof} / N_{prof}}{N_{skill,all} / N_{all}}
+```
 
 A value of B \>= 1 indicates the skill is over-represented in that
 profession relative to its overall frequency – i.e., the skill is
 “specific” to the profession.
 
 ``` r
+
 # 1. synthetic skill occurrence data -----
 skills <- data.table(
   preferredLabel    = c(rep("Software developer", 5),
@@ -230,6 +240,7 @@ Skills with very low IDF (bottom quantile) are classified as “alta”
 are “minima” (rare/niche).
 
 ``` r
+
 # 1. aggregated skill frequencies -----
 skills_agg <- data.table(
   escoskill_level_3 = c("Python", "Java", "SQL", "Docker",
@@ -252,6 +263,7 @@ translated to Italian (`settoriale`, `trasversale`, `specifico`,
 `multisettoriale`).
 
 ``` r
+
 # 1. skill metadata -----
 skill_meta <- data.table(
   escoskill_level_3     = c("Python", "Python", "SQL", "SQL"),
@@ -277,12 +289,15 @@ A variant of diffusion analysis that operates at the **document level**.
 Instead of using aggregated counts, it computes IDF based on the number
 of distinct announcements (documents) mentioning each skill:
 
-$$IDF = \log\left( \frac{N_{docs\_ total}}{N_{docs\_ with\_ skill}} \right)$$
+``` math
+IDF = \log\left(\frac{N_{docs\_total}}{N_{docs\_with\_skill}}\right)
+```
 
 This is more robust to situations where a single announcement might list
 the same skill multiple times.
 
 ``` r
+
 # 1. document-level skill data -----
 skills_merged <- data.table(
   general_id        = c(1, 1, 1, 2, 2, 3, 3, 3, 3),
@@ -314,6 +329,7 @@ term-document matrix approach. The entry (i, j) counts how many
 announcements mention both skill i and skill j.
 
 ``` r
+
 # 1. skill assignment data -----
 skills <- data.table(
   general_id        = c(1, 1, 1, 2, 2, 3, 3, 3),
@@ -336,12 +352,15 @@ associations. **Relative risk** filtering retains only edges where the
 observed co-occurrence exceeds the expected frequency under
 independence:
 
-$$RR = \frac{O_{ij}}{E_{ij}} = \frac{O_{ij} \times N_{total}}{N_{i} \times N_{j}}$$
+``` math
+RR = \frac{O_{ij}}{E_{ij}} = \frac{O_{ij} \times N_{total}}{N_i \times N_j}
+```
 
 Only pairs with RR \> 1 (observed count exceeds the independence
 baseline) are kept.
 
 ``` r
+
 # 1. filter by relative risk -----
 rr_edges <- filter_relative_risk(cooc_mat)
 ```
@@ -368,6 +387,7 @@ which:
 5.  Retains the top-N edges and largest connected component.
 
 ``` r
+
 # 1. skill data with profession labels -----
 skills <- data.table(
   general_id        = rep(1:30, each = 3),
@@ -405,14 +425,15 @@ supports four methods from the igraph library.
 Takes a co-occurrence edge list and applies a community detection
 algorithm. The supported methods are:
 
-| Method         | Algorithm             | Description                                                 |
-|----------------|-----------------------|-------------------------------------------------------------|
-| `"infomap"`    | Information-theoretic | Minimizes the description length of a random walk (default) |
-| `"label_prop"` | Label propagation     | Fast, non-deterministic propagation of labels               |
-| `"walktrap"`   | Random walks          | Uses short random walks to identify communities             |
-| `"spinglass"`  | Statistical mechanics | Spin-glass model, suitable for smaller graphs               |
+| Method | Algorithm | Description |
+|----|----|----|
+| `"infomap"` | Information-theoretic | Minimizes the description length of a random walk (default) |
+| `"label_prop"` | Label propagation | Fast, non-deterministic propagation of labels |
+| `"walktrap"` | Random walks | Uses short random walks to identify communities |
+| `"spinglass"` | Statistical mechanics | Spin-glass model, suitable for smaller graphs |
 
 ``` r
+
 # 1. co-occurrence edge list -----
 cooc_edges <- data.table(
   from   = c("Python", "Python", "SQL", "Java", "Docker", "Docker"),
@@ -446,6 +467,7 @@ out cells where the observed skill count is below expected, retaining
 only skills that are over-represented in a profession.
 
 ``` r
+
 # 1. profession-skill data -----
 competenze <- data.table(
   cod_3             = c("2.1.1", "2.1.1", "2.1.1", "2.1.2", "2.1.2", "2.1.2"),
@@ -470,6 +492,7 @@ dendrogram can be plotted or cut into groups with
 [`stats::cutree()`](https://rdrr.io/r/stats/cutree.html).
 
 ``` r
+
 # 1. hierarchical clustering -----
 hc <- cluster_professions(dist_mat, method = "ward.D2")
 
@@ -490,6 +513,7 @@ announcements.
 Filters announcements to those with a positive `salaryvalue`.
 
 ``` r
+
 # 1. announcement data with salary -----
 ann_salary <- data.table(
   general_id  = 1:5,
@@ -510,6 +534,7 @@ When `"mese"` is included in the grouping and does not exist in the
 data, it is derived from the `data` column as a `"YYYY-MM"` string.
 
 ``` r
+
 # 1. compute by salary band and month -----
 sal_period <- compute_salary_by_period(sal, by = c("salary", "mese"))
 ```
@@ -523,6 +548,7 @@ Joins salary data with a skills table and computes the median salary for
 each ESCO level 3 skill.
 
 ``` r
+
 # 1. skills table -----
 skills <- data.table(
   general_id        = c(1, 1, 3, 3, 5),
@@ -552,6 +578,7 @@ Converts announcement data into a `tsibble` keyed by data source
 source per month.
 
 ``` r
+
 # 1. announcement data with source -----
 ann <- data.table(
   general_id      = 1:100,
@@ -574,6 +601,7 @@ Returns mean, standard deviation, total count, trend/seasonality
 strength, and coefficient of variation (CV = sd / mean).
 
 ``` r
+
 # 1. compute features -----
 features <- compute_source_features(tst)
 ```
@@ -585,6 +613,7 @@ threshold and whose total count meets a minimum. Lower CV indicates more
 consistent publishing patterns.
 
 ``` r
+
 # 1. filter -----
 stable <- filter_stable_sources(features, cv_threshold = 0.6, min_total = 100L)
 ```
@@ -596,6 +625,7 @@ The result is a character vector of stable source names.
 Subsets announcements to keep only rows from stable sources.
 
 ``` r
+
 # 1. filter announcements -----
 ann_stable <- filter_annunci_by_source(ann, stable)
 ```
@@ -612,6 +642,7 @@ quarter, month), then ranks skills within each profession-period
 combination in descending order of count.
 
 ``` r
+
 # 1. skill-profession-date data -----
 competenze <- data.table(
   escoskill_level_3 = c("Python", "SQL", "Docker", "Python", "SQL",
@@ -639,6 +670,7 @@ so positive values indicate improvement (the skill moved to a higher
 rank).
 
 ``` r
+
 # 1. compute variation -----
 variation <- compute_skill_variation(
   serie,
@@ -669,6 +701,7 @@ level. The pipeline:
     (specific) skills.
 
 ``` r
+
 # 1. synthetic data -----
 ann <- data.table(
   general_id     = c(1, 2, 3, 4, 5),
@@ -702,6 +735,7 @@ Aggregates to the profession-skill level with unique announcement
 counts.
 
 ``` r
+
 # 1. inputs -----
 ann <- data.table(
   general_id     = 1:4,
@@ -748,6 +782,7 @@ and transparency scale with co-occurrence weight. Only the largest
 connected component is plotted.
 
 ``` r
+
 # 1. co-occurrence edge list -----
 cooc_edges <- data.table(
   from   = c("Python", "Python", "SQL", "Docker", "Docker"),
@@ -769,6 +804,7 @@ profession. When `skills = NULL`, the function automatically selects the
 10 most frequently occurring skills.
 
 ``` r
+
 # 1. ranking series -----
 serie <- data.table(
   mese         = rep(as.Date(c("2022-01-01", "2023-01-01", "2024-01-01")),
@@ -798,6 +834,7 @@ ESCO ISCO group classification mapping occupation codes to profession
 names and hierarchy labels.
 
 ``` r
+
 data(isco_gruppi)
 ```
 
@@ -815,19 +852,20 @@ Pre-computed master skills list with frequency, reuse type, and domain
 flags.
 
 ``` r
+
 data(skillist)
 ```
 
-| Column                 | Description                                                                     |
-|------------------------|---------------------------------------------------------------------------------|
-| `escoskill_level_3`    | Skill identifier (ESCO level 3)                                                 |
+| Column | Description |
+|----|----|
+| `escoskill_level_3` | Skill identifier (ESCO level 3) |
 | `esco_v0101_reusetype` | Reuse type (sector-specific, transversal, occupation-specific, multisettoriale) |
-| `N`                    | Recurrence count                                                                |
-| `tipo`                 | Italian type label                                                              |
-| `pillar_softskills`    | Soft-skill flag                                                                 |
-| `esco_v0101_ict`       | ICT skill flag                                                                  |
-| `esco_v0101_green`     | Green skill flag                                                                |
-| `esco_v0101_language`  | Language skill flag                                                             |
+| `N` | Recurrence count |
+| `tipo` | Italian type label |
+| `pillar_softskills` | Soft-skill flag |
+| `esco_v0101_ict` | ICT skill flag |
+| `esco_v0101_green` | Green skill flag |
+| `esco_v0101_language` | Language skill flag |
 
 ### cooccorrenza
 
@@ -835,6 +873,7 @@ Pre-computed global skill co-occurrence edges with relative-risk
 filtering applied.
 
 ``` r
+
 data(cooccorrenza)
 ```
 
@@ -850,6 +889,7 @@ The following outlines a complete end-to-end pipeline using skillviz
 functions.
 
 ``` r
+
 library(skillviz)
 library(data.table)
 

@@ -17,6 +17,7 @@ conventions used throughout the package. In production these tables come
 from ESCO-classified job advertisements.
 
 ``` r
+
 library(skillviz)
 library(data.table)
 
@@ -44,6 +45,7 @@ concentrated a skill is within a profession relative to all professions.
 Values \>= 1 indicate that the skill is specific to the profession.
 
 ``` r
+
 # 3. Compute Balassa index -----
 balassa <- compute_balassa_index(skills_dt)
 head(balassa)
@@ -56,6 +58,7 @@ applies a TF-IDF measure to classify skills into three diffusion bands:
 *alta* (widespread), *centrale* (mid-range), and *minima* (rare).
 
 ``` r
+
 # 4. Compute skill diffusion -----
 diffusion <- compute_skill_diffusion(skills_agg)
 head(diffusion)
@@ -70,6 +73,7 @@ retains only pairs whose observed co-occurrence exceeds the independence
 baseline.
 
 ``` r
+
 # 5. Build co-occurrence matrix -----
 cooc_mat <- compute_cooc_matrix(skills_dt)
 
@@ -85,6 +89,7 @@ applies a graph-based community detection algorithm and returns the
 graph, community object, and membership vector.
 
 ``` r
+
 # 7. Detect skill communities -----
 comm <- detect_skill_communities(rr_edges, method = "walktrap")
 comm$membership
@@ -97,6 +102,7 @@ renders the co-occurrence network using `ggraph`. It requires the
 optional packages `ggraph`, `tidygraph`, and `ggplot2`.
 
 ``` r
+
 # 8. Plot the co-occurrence network -----
 plot_cooc_graph(rr_edges, profession = "Data analyst")
 ```
@@ -109,6 +115,7 @@ Balassa filter, and computes pairwise distances. The input requires a
 `cod_3` column (profession code) instead of `preferredLabel`.
 
 ``` r
+
 # 9. Prepare distance input -----
 distance_dt <- data.table(
   cod_3             = sample(professions, n_rows, replace = TRUE),
@@ -128,6 +135,7 @@ ranks skills within each profession at each time period. It requires
 columns `nome_3`, `escoskill_level_3`, and `gdate`.
 
 ``` r
+
 # 11. Prepare temporal input -----
 dates <- seq(as.Date("2022-01-01"), as.Date("2024-12-01"), by = "month")
 temporal_dt <- data.table(
@@ -152,6 +160,7 @@ The package ships three pre-computed datasets:
   filtered)
 
 ``` r
+
 # 13. Load bundled data -----
 data(cooccorrenza)
 head(cooccorrenza)

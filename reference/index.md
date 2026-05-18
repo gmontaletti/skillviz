@@ -125,6 +125,18 @@ Extract profession-specific skills and build skill profiles.
 - [`build_profession_skill_profile()`](https://gmontaletti.github.io/skillviz/reference/build_profession_skill_profile.md)
   : Build a comprehensive profession-skill profile table
 
+## Profession Matching
+
+Rank professions by closeness to a declared skill set.
+
+- [`match_professions()`](https://gmontaletti.github.io/skillviz/reference/match_professions.md)
+  : Classifica le professioni ESCO L4 piu' affini a un insieme di
+  competenze
+- [`match_professions_prepare()`](https://gmontaletti.github.io/skillviz/reference/match_professions_prepare.md)
+  : Pre-computa la matrice profilo professionale per il matching
+- [`match_professions_score()`](https://gmontaletti.github.io/skillviz/reference/match_professions_score.md)
+  : Calcola la classifica delle professioni a partire da un prep
+
 ## Visualization
 
 Plot co-occurrence networks and skill ranking series.

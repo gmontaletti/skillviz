@@ -7,8 +7,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Skill Co-Occurrence Analysis and Visualization from Online Job Advertisements • skillviz</title>
 <script src="deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Skill Co-Occurrence Analysis and Visualization from Online Job Advertisements">
 <meta name="description" content="Analyzes skill requirements from Online Job Advertising (OJA) data. Provides tools for computing skill specialization indices (Balassa/RCA), co-occurrence networks, source stability filtering, salary analysis, professional distance clustering, and temporal skill ranking. Built on ESCO and CP2021 (Italian professional classifications) taxonomies.">
@@ -72,64 +72,64 @@
 <col width="34%">
 <col width="65%">
 </colgroup>
-<thead><tr class="header">
+<thead><tr>
 <th>Domain</th>
 <th>Key functions</th>
 </tr></thead>
 <tbody>
-<tr class="odd">
+<tr>
 <td>Data loading</td>
 <td>
 <code><a href="reference/read_esco_mapping.html">read_esco_mapping()</a></code>, <code><a href="reference/read_isco_groups.html">read_isco_groups()</a></code>, <code><a href="reference/deduplicate_annunci.html">deduplicate_annunci()</a></code>
 </td>
 </tr>
-<tr class="even">
+<tr>
 <td>Classification crosswalks</td>
 <td>
 <code><a href="reference/build_cpi_esco_crosswalk.html">build_cpi_esco_crosswalk()</a></code>, <code><a href="reference/prepare_annunci_esco.html">prepare_annunci_esco()</a></code>, <code><a href="reference/prepare_annunci_geography.html">prepare_annunci_geography()</a></code>
 </td>
 </tr>
-<tr class="odd">
+<tr>
 <td>Skill relevance</td>
 <td>
 <code><a href="reference/compute_balassa_index.html">compute_balassa_index()</a></code>, <code><a href="reference/compute_skill_diffusion.html">compute_skill_diffusion()</a></code>, <code><a href="reference/build_skillist.html">build_skillist()</a></code>
 </td>
 </tr>
-<tr class="even">
+<tr>
 <td>Co-occurrence networks</td>
 <td>
 <code><a href="reference/compute_cooc_matrix.html">compute_cooc_matrix()</a></code>, <code><a href="reference/filter_relative_risk.html">filter_relative_risk()</a></code>, <code><a href="reference/cooc_all_professions.html">cooc_all_professions()</a></code>
 </td>
 </tr>
-<tr class="odd">
+<tr>
 <td>Community detection</td>
 <td><code><a href="reference/detect_skill_communities.html">detect_skill_communities()</a></code></td>
 </tr>
-<tr class="even">
+<tr>
 <td>Professional distance</td>
 <td>
 <code><a href="reference/compute_profession_distance.html">compute_profession_distance()</a></code>, <code><a href="reference/cluster_professions.html">cluster_professions()</a></code>
 </td>
 </tr>
-<tr class="odd">
+<tr>
 <td>Salary analysis</td>
 <td>
 <code><a href="reference/extract_salary_data.html">extract_salary_data()</a></code>, <code><a href="reference/compute_salary_by_period.html">compute_salary_by_period()</a></code>, <code><a href="reference/compute_salary_by_skill.html">compute_salary_by_skill()</a></code>
 </td>
 </tr>
-<tr class="even">
+<tr>
 <td>Source stability</td>
 <td>
 <code><a href="reference/prepare_source_tsibble.html">prepare_source_tsibble()</a></code>, <code><a href="reference/compute_source_features.html">compute_source_features()</a></code>, <code><a href="reference/filter_stable_sources.html">filter_stable_sources()</a></code>
 </td>
 </tr>
-<tr class="odd">
+<tr>
 <td>Temporal analysis</td>
 <td>
 <code><a href="reference/compute_skill_ranking_series.html">compute_skill_ranking_series()</a></code>, <code><a href="reference/compute_skill_variation.html">compute_skill_variation()</a></code>
 </td>
 </tr>
-<tr class="even">
+<tr>
 <td>Visualization</td>
 <td>
 <code><a href="reference/plot_cooc_graph.html">plot_cooc_graph()</a></code>, <code><a href="reference/plot_skill_ranking.html">plot_skill_ranking()</a></code>

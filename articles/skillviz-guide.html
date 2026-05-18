@@ -7,8 +7,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Comprehensive Guide to skillviz • skillviz</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Comprehensive Guide to skillviz">
 </head>
@@ -348,7 +348,7 @@ translated to Italian (<code>settoriale</code>,
 level</strong>. Instead of using aggregated counts, it computes IDF
 based on the number of distinct announcements (documents) mentioning
 each skill:</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>I</mi><mi>D</mi><mi>F</mi><mo>=</mo><mo>log</mo><mrow><mo stretchy="true" form="prefix">(</mo><mfrac><msub><mi>N</mi><mrow><mi>d</mi><mi>o</mi><mi>c</mi><mi>s</mi><mi>_</mi><mi>t</mi><mi>o</mi><mi>t</mi><mi>a</mi><mi>l</mi></mrow></msub><msub><mi>N</mi><mrow><mi>d</mi><mi>o</mi><mi>c</mi><mi>s</mi><mi>_</mi><mi>w</mi><mi>i</mi><mi>t</mi><mi>h</mi><mi>_</mi><mi>s</mi><mi>k</mi><mi>i</mi><mi>l</mi><mi>l</mi></mrow></msub></mfrac><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">IDF = \log\left(\frac{N_{docs\_total}}{N_{docs\_with\_skill}}\right)</annotation></semantics></math></p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>I</mi><mi>D</mi><mi>F</mi><mo>=</mo><mrow><mi mathvariant="normal">log</mi><mo>⁡</mo></mrow><mrow><mo stretchy="true" form="prefix">(</mo><mfrac><msub><mi>N</mi><mrow><mi>d</mi><mi>o</mi><mi>c</mi><mi>s</mi><mi>_</mi><mi>t</mi><mi>o</mi><mi>t</mi><mi>a</mi><mi>l</mi></mrow></msub><msub><mi>N</mi><mrow><mi>d</mi><mi>o</mi><mi>c</mi><mi>s</mi><mi>_</mi><mi>w</mi><mi>i</mi><mi>t</mi><mi>h</mi><mi>_</mi><mi>s</mi><mi>k</mi><mi>i</mi><mi>l</mi><mi>l</mi></mrow></msub></mfrac><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">IDF = \log\left(\frac{N_{docs\_total}}{N_{docs\_with\_skill}}\right)</annotation></semantics></math></p>
 <p>This is more robust to situations where a single announcement might
 list the same skill multiple times.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
