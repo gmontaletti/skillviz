@@ -139,6 +139,12 @@ deduplicate_annunci <- function(ann, active_date = Sys.Date()) {
 #'   matching files are found.
 #'
 #' @details
+#' \strong{Deprecated}. Use \code{\link{read_oja_itaposts}} instead.
+#' Reading the raw Lightcast ZIP archives is superseded by the DuckDB
+#' store maintained by the \pkg{itaposts} package, which owns the read,
+#' dedup and join logic this function duplicates. Retained for backward
+#' compatibility; scheduled for removal in a future release.
+#'
 #' The function uses \code{data.table::fread()} with the \code{cmd}
 #' argument to pipe \code{unzip -p} output directly, avoiding temporary
 #' file extraction. This is efficient for large CSV files compressed
@@ -152,6 +158,8 @@ deduplicate_annunci <- function(ann, active_date = Sys.Date()) {
 #'     \code{general_id}, including ESCO skill taxonomy fields.}
 #'   \item{postings_raw}{Minimal posting data with company name.}
 #' }
+#'
+#' @seealso \code{\link{read_oja_itaposts}} for the supported replacement.
 #'
 #' @export
 #' @examples
@@ -180,6 +188,8 @@ read_ojv_zip <- function(
   nrows = Inf,
   verbose = TRUE
 ) {
+  .Deprecated("read_oja_itaposts", package = "skillviz")
+
   # 1. input validation -----
   type <- match.arg(type)
 
@@ -346,6 +356,17 @@ read_ojv_zip <- function(
 #'       \code{general_id} values present in \code{postings}.}
 #'   }
 #'
+#' @details
+#' \strong{Deprecated}. Use \code{\link{read_oja_itaposts}} instead.
+#' Reading the raw Lightcast ZIP archives is superseded by the DuckDB
+#' store maintained by the \pkg{itaposts} package, which performs the same
+#' dedup and referential-integrity steps at ingest time. The replacement
+#' returns the same \code{list(postings, skills, companies)} shape, so
+#' call sites only need their data-loading line changed. Retained for
+#' backward compatibility; scheduled for removal in a future release.
+#'
+#' @seealso \code{\link{read_oja_itaposts}} for the supported replacement.
+#'
 #' @export
 #' @examples
 #' \dontrun{
@@ -358,28 +379,27 @@ read_ojv_zip <- function(
 #' ojv24 <- normalize_ojv("/path/to/zip/dir", years = 2024L)
 #' }
 normalize_ojv <- function(path, years = NULL, months = NULL, verbose = TRUE) {
+  .Deprecated("read_oja_itaposts", package = "skillviz")
+
   # 1. read all three types -----
-  postings <- read_ojv_zip(
-    path,
-    type = "postings",
-    years = years,
-    months = months,
-    verbose = verbose
-  )
-  skills <- read_ojv_zip(
-    path,
-    type = "skills",
-    years = years,
-    months = months,
-    verbose = verbose
-  )
-  companies <- read_ojv_zip(
-    path,
-    type = "postings_raw",
-    years = years,
-    months = months,
-    verbose = verbose
-  )
+  # read_ojv_zip() is deprecated too: muffle its warning so a single
+  # normalize_ojv() call reports the deprecation once, not four times.
+  read_type <- function(type) {
+    withCallingHandlers(
+      read_ojv_zip(
+        path,
+        type = type,
+        years = years,
+        months = months,
+        verbose = verbose
+      ),
+      deprecatedWarning = function(w) invokeRestart("muffleWarning")
+    )
+  }
+
+  postings <- read_type("postings")
+  skills <- read_type("skills")
+  companies <- read_type("postings_raw")
 
   # 2. deduplicate postings -----
   if (nrow(postings) > 0L && "general_id" %in% names(postings)) {
@@ -430,6 +450,141 @@ normalize_ojv <- function(path, years = NULL, months = NULL, verbose = TRUE) {
   }
   if (nrow(companies) > 0L && "general_id" %in% names(companies)) {
     data.table::setkey(companies, general_id)
+  }
+
+  list(postings = postings, skills = skills, companies = companies)
+}
+
+# 6. read_oja_itaposts -----
+
+#' Read normalized OJA data from the itaposts DuckDB store
+#'
+#' Loads Online Job Advertisement (OJA) data from the shared DuckDB store
+#' maintained by the \pkg{itaposts} package and returns it in the same
+#' three-table shape produced by \code{\link{normalize_ojv}}, with the
+#' skill-side column names lower-cased so they match the names the rest of
+#' \pkg{skillviz} consumes.
+#'
+#' @param con A connection to the itaposts DuckDB store, as returned by
+#'   \code{itaposts::oja_connect()}.
+#' @param snapshots Character vector of \code{snapshot_id} values to
+#'   include (e.g. \code{"ITC4_2026_2"}), or \code{NULL} (default) for all
+#'   snapshots in the store.
+#' @param region_code Character vector of NUTS-2 region codes to include
+#'   (e.g. \code{"ITC4"}), or \code{NULL} (default) for all regions.
+#' @param years Integer vector of years to include, or \code{NULL}
+#'   (default) for all available years. Intersected with \code{snapshots}
+#'   against the store's snapshot metadata.
+#' @param months Integer vector of months to include, or \code{NULL}
+#'   (default) for all available months.
+#' @param verbose Logical scalar. If \code{TRUE} (default), itaposts
+#'   reports the row count of each returned table.
+#'
+#' @return A named list with three \code{data.table} elements, all keyed
+#'   on \code{general_id}:
+#'   \describe{
+#'     \item{postings}{One row per \code{general_id}, with the CP2021 and
+#'       ESCO occupation hierarchies already joined in (including
+#'       \code{idesco_level_4}), the geography, contract, education,
+#'       sector, experience, working-hours, salary and source attributes,
+#'       and \code{companyname}.}
+#'     \item{skills}{Long-format skill rows (one per posting/skill pair)
+#'       with lower-cased ESCO skill attribute columns.}
+#'     \item{companies}{The \code{general_id}/\code{companyname} pair, with
+#'       missing and empty company names dropped.}
+#'   }
+#'
+#' @details
+#' This is the recommended way to load OJA data into \pkg{skillviz}.
+#' \code{\link{normalize_ojv}} reads the raw vendor ZIP archives directly
+#' and duplicates read/dedup logic that now lives in \pkg{itaposts}; it is
+#' retained for backward compatibility only.
+#'
+#' The connection is caller-owned, following the itaposts idiom:
+#'
+#' \preformatted{
+#' con <- itaposts::oja_connect()
+#' on.exit(itaposts::oja_disconnect(con), add = TRUE)
+#' }
+#'
+#' \code{itaposts::oja_normalised()} re-emits the skill columns under their
+#' historical Lightcast SHOUTING names. This function lower-cases them, so
+#' \code{IDESCOSKILL_LEVEL_3}, \code{ESCOSKILL_LEVEL_3},
+#' \code{ESCO_V0101_OBSOLETE}, \code{ESCO_v0101_DESCRIPTION},
+#' \code{ESCO_V0101_URI}, \code{ESCO_V0101_SKILLSTYPE},
+#' \code{ESCO_V0101_REUSETYPE}, \code{ESCO_V0101_GREEN} and
+#' \code{ESCO_V0101_LANGUAGE} become \code{idescoskill_level_3},
+#' \code{escoskill_level_3}, \code{esco_v0101_obsolete},
+#' \code{esco_v0101_description}, \code{esco_v0101_uri},
+#' \code{esco_v0101_skillstype}, \code{esco_v0101_reusetype},
+#' \code{esco_v0101_green} and \code{esco_v0101_language}. Only columns
+#' actually present are renamed, so the function tolerates changes to the
+#' itaposts shim's column set.
+#'
+#' \code{pillar_softskills} and \code{esco_v0101_ict} are \emph{not}
+#' returned: the vendor dropped them in the \code{data_v2} delivery and
+#' itaposts has no substitute for them. Downstream code must treat them as
+#' optional.
+#'
+#' @seealso \code{\link{normalize_ojv}} for the legacy ZIP-based reader.
+#'
+#' @export
+#' @examples
+#' \dontrun{
+#' con <- itaposts::oja_connect()
+#' on.exit(itaposts::oja_disconnect(con), add = TRUE)
+#'
+#' ojv <- read_oja_itaposts(con)
+#' ojv$postings
+#' ojv$skills
+#' ojv$companies
+#'
+#' # Lombardy, 2024 only
+#' ojv24 <- read_oja_itaposts(con, region_code = "ITC4", years = 2024L)
+#' }
+read_oja_itaposts <- function(
+  con,
+  snapshots = NULL,
+  region_code = NULL,
+  years = NULL,
+  months = NULL,
+  verbose = TRUE
+) {
+  # 1. input validation -----
+  if (missing(con) || !inherits(con, "DBIConnection")) {
+    stop(
+      "read_oja_itaposts: 'con' must be a DBI connection to the itaposts ",
+      "store, as returned by itaposts::oja_connect()",
+      call. = FALSE
+    )
+  }
+
+  # 2. delegate to the itaposts compatibility shim -----
+  ojv <- itaposts::oja_normalised(
+    con,
+    snapshots = snapshots,
+    region_code = region_code,
+    years = years,
+    months = months,
+    verbose = verbose
+  )
+
+  postings <- ojv$postings
+  skills <- ojv$skills
+  companies <- ojv$companies
+
+  # 3. lower-case the legacy SHOUTING skill columns -----
+  nm <- names(skills)
+  upper <- nm[nm != tolower(nm) & !tolower(nm) %in% nm]
+  if (length(upper) > 0L) {
+    data.table::setnames(skills, upper, tolower(upper))
+  }
+
+  # 4. set keys -----
+  for (dt in list(postings, skills, companies)) {
+    if ("general_id" %in% names(dt)) {
+      data.table::setkeyv(dt, "general_id")
+    }
   }
 
   list(postings = postings, skills = skills, companies = companies)

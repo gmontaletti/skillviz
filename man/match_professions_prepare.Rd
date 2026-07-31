@@ -14,12 +14,13 @@ match_professions_prepare(
 \arguments{
 \item{postings}{\code{data.table} con almeno le colonne \code{general_id} e
 \code{idesco_level_4}. Tipicamente ottenuto da
-\code{itaposts::oja_postings(con) |> dplyr::collect()}.}
+\code{read_oja_itaposts(con)$postings}: \code{itaposts::oja_postings()} da sola
+non espone \code{idesco_level_4}.}
 
 \item{skills_long}{\code{data.table} in formato lungo con almeno le colonne
 \code{general_id} e \code{idescoskill_level_3}. Una riga per coppia
 (annuncio, competenza). Tipicamente ottenuto da
-\code{itaposts::oja_skills(con) |> dplyr::collect()}.}
+\code{read_oja_itaposts(con)$skills}.}
 
 \item{basis}{Base del profilo professionale: \code{"coverage"} (default),
 \code{"tfidf"} oppure \code{"rca"}.}
@@ -72,16 +73,15 @@ Per la semantica delle basi (\code{coverage}, \code{tfidf}, \code{rca}) si veda
 }
 \examples{
 \dontrun{
-con  <- itaposts::oja_connect()
+con <- itaposts::oja_connect()
 on.exit(itaposts::oja_disconnect(con), add = TRUE)
 
-post <- itaposts::oja_postings(con)  |> dplyr::collect() |> data.table::setDT()
-skil <- itaposts::oja_skills(con)    |> dplyr::collect() |> data.table::setDT()
+ojv <- skillviz::read_oja_itaposts(con)
 
 # prepara una sola volta, riusa per molte query
 prep <- skillviz::match_professions_prepare(
-  postings = post,
-  skills_long = skil,
+  postings = ojv$postings,
+  skills_long = ojv$skills,
   basis = "coverage"
 )
 

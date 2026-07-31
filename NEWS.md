@@ -1,4 +1,47 @@
-# skillviz (in sviluppo)
+# skillviz 0.2.0
+
+## Lettura dei dati OJA da itaposts
+
+* Nuova dipendenza formale da `itaposts` (`Imports`, installato tramite
+  `Remotes: gmontaletti/itaposts`), che centralizza import, normalizzazione e
+  archiviazione dei dati OJA nello store DuckDB condiviso.
+* `read_oja_itaposts()` — nuova funzione, modalità raccomandata per caricare i
+  dati OJA in skillviz. Delega a `itaposts::oja_normalised()` e restituisce la
+  stessa lista a tre elementi `list(postings, skills, companies)` prodotta da
+  `normalize_ojv()`, con le tre tabelle chiavate su `general_id`. La
+  connessione resta a carico del chiamante, secondo l'idioma itaposts
+  (`itaposts::oja_connect()` / `itaposts::oja_disconnect()`). Accetta i filtri
+  `snapshots`, `region_code`, `years` e `months`.
+* Le colonne di skill che itaposts riemette con i nomi maiuscoli storici
+  Lightcast (`ESCOSKILL_LEVEL_3`, `ESCO_V0101_REUSETYPE`, `ESCO_V0101_GREEN`,
+  `ESCO_V0101_LANGUAGE`, ...) vengono convertite in minuscolo, i nomi già
+  attesi dal resto del pacchetto. Solo le colonne effettivamente presenti
+  vengono rinominate, quindi la funzione tollera variazioni nell'insieme di
+  colonne esposto da itaposts.
+* Gli esempi di `match_professions()`, `match_professions_prepare()` e
+  `match_professions_score()` usano `read_oja_itaposts()`: le chiamate dirette
+  a `itaposts::oja_postings()` che vi figuravano non espongono
+  `idesco_level_4`, richiesto da queste funzioni.
+
+## Colonne `pillar_softskills` e `esco_v0101_ict` opzionali
+
+* `build_skillist()` non richiede più `pillar_softskills` e `esco_v0101_ict`
+  fra le colonne di `skills`. Le due colonne restano sempre presenti
+  nell'output e valgono `NA_integer_` quando assenti in input; la
+  classificazione `tipo` deriva dal solo `esco_v0101_reusetype` e non cambia.
+  Le sorgenti che ancora portano i due flag li propagano invariati.
+* La modifica segue la migrazione `data_v2` di `itaposts`: il fornitore ha
+  rimosso i due flag dalla consegna e non esiste alcun sostituto. I dati letti
+  con `read_oja_itaposts()` riportano quindi `NA` in entrambe le colonne.
+
+## Deprecazioni
+
+* `read_ojv_zip()` e `normalize_ojv()` sono deprecate in favore di
+  `read_oja_itaposts()`. Le due funzioni continuano a operare ed emettono un
+  avviso di deprecazione; la lettura diretta degli archivi ZIP Lightcast è
+  superata dallo store DuckDB di `itaposts`, che possiede la stessa logica di
+  lettura, deduplicazione e join. La rimozione è prevista in una versione
+  futura, non prima di una MINOR successiva.
 
 ## API split per scoring veloce
 

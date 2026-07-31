@@ -65,8 +65,8 @@ graph <- plot_cooc_graph(cooccorrenza, top_n = 50)
 To cite skillviz in publications, use:
 
 ```
-Montaletti G (2025). skillviz: Skill Co-Occurrence Analysis and Visualization
-from Online Job Advertisements. R package version 0.1.0.
+Montaletti G (2026). skillviz: Skill Co-Occurrence Analysis and Visualization
+from Online Job Advertisements. R package version 0.2.0.
 https://github.com/gmontaletti/skillviz
 ```
 
@@ -76,8 +76,8 @@ A BibTeX entry:
 @Manual{skillviz,
   title = {skillviz: Skill Co-Occurrence Analysis and Visualization from Online Job Advertisements},
   author = {Giampaolo Montaletti},
-  year = {2025},
-  note = {R package version 0.1.0},
+  year = {2026},
+  note = {R package version 0.2.0},
   url = {https://github.com/gmontaletti/skillviz},
 }
 ```

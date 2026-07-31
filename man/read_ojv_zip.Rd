@@ -54,6 +54,12 @@ ZIP files are expected to follow the naming pattern
 \code{ITC4_{year}_{month}_{type}.zip} where \code{type} is one of
 \code{"postings"}, \code{"skills"}, or \code{"postings_raw"}.
 
+\strong{Deprecated}. Use \code{\link{read_oja_itaposts}} instead.
+Reading the raw Lightcast ZIP archives is superseded by the DuckDB
+store maintained by the \pkg{itaposts} package, which owns the read,
+dedup and join logic this function duplicates. Retained for backward
+compatibility; scheduled for removal in a future release.
+
 The function uses \code{data.table::fread()} with the \code{cmd}
 argument to pipe \code{unzip -p} output directly, avoiding temporary
 file extraction. This is efficient for large CSV files compressed
@@ -85,4 +91,7 @@ sk <- read_ojv_zip(
 # Read first 1000 rows per file for exploration
 sample <- read_ojv_zip("/path/to/zip/dir", type = "postings", nrows = 1000)
 }
+}
+\seealso{
+\code{\link{read_oja_itaposts}} for the supported replacement.
 }

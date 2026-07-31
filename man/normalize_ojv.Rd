@@ -40,6 +40,14 @@ Deduplication keeps the most recent observation per \code{general_id},
 determined by \code{year_grab_date} and \code{month_grab_date} columns
 (descending sort). If these columns are absent, the first occurrence is
 kept.
+
+\strong{Deprecated}. Use \code{\link{read_oja_itaposts}} instead.
+Reading the raw Lightcast ZIP archives is superseded by the DuckDB
+store maintained by the \pkg{itaposts} package, which performs the same
+dedup and referential-integrity steps at ingest time. The replacement
+returns the same \code{list(postings, skills, companies)} shape, so
+call sites only need their data-loading line changed. Retained for
+backward compatibility; scheduled for removal in a future release.
 }
 \examples{
 \dontrun{
@@ -51,4 +59,7 @@ ojv$companies
 # Filter to 2024 data only
 ojv24 <- normalize_ojv("/path/to/zip/dir", years = 2024L)
 }
+}
+\seealso{
+\code{\link{read_oja_itaposts}} for the supported replacement.
 }

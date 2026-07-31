@@ -24,6 +24,7 @@ reference:
   - title: Data Loading and Deduplication
     desc: Functions for reading OJA data, ESCO mappings, and deduplicating announcements.
     contents:
+      - read_oja_itaposts
       - read_esco_mapping
       - read_isco_groups
       - read_ojv_zip

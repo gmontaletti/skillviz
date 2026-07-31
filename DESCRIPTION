@@ -1,6 +1,6 @@
 Package: skillviz
 Title: Skill Co-Occurrence Analysis and Visualization from Online Job Advertisements
-Version: 0.1.0
+Version: 0.2.0
 Authors@R:
     person("Giampaolo", "Montaletti", , "giampaolo.montaletti@gmail.com",
            role = c("aut", "cre"),
@@ -23,6 +23,7 @@ Imports:
     data.table (>= 1.14.0),
     fst,
     igraph,
+    itaposts,
     Matrix,
     collapse
 Suggests:
@@ -42,6 +43,8 @@ Suggests:
     rmarkdown,
     testthat (>= 3.0.0),
     withr
+Remotes:
+    gmontaletti/itaposts
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 Config/Needs/website: pkgdown

@@ -102,13 +102,22 @@ compute_skill_diffusion <- function(
 #' Aggregates skill metadata (reuse type, flag columns) and merges with diffusion
 #' scores. The ESCO reuse type labels are translated to Italian.
 #'
-#' @param skills A `data.table` of skill occurrences with columns:
-#'   `escoskill_level_3`, `esco_v0101_reusetype`, `pillar_softskills`,
-#'   `esco_v0101_ict`, `esco_v0101_green`, `esco_v0101_language`.
+#' @param skills A `data.table` of skill occurrences with required columns
+#'   `escoskill_level_3`, `esco_v0101_reusetype`, `esco_v0101_green`,
+#'   `esco_v0101_language`, and the optional columns `pillar_softskills` and
+#'   `esco_v0101_ict`.
 #' @param diffusion A `data.table` as returned by [compute_skill_diffusion()],
 #'   with columns `escoskill_level_3`, `N`, `tf`, `idf`, `diffusione`.
 #' @return A `data.table` with one row per unique skill, including metadata
-#'   columns, the Italian type label (`tipo`), and diffusion scores.
+#'   columns, the Italian type label (`tipo`), and diffusion scores. The
+#'   columns `pillar_softskills` and `esco_v0101_ict` are always present, and
+#'   are `NA_integer_` when absent from `skills`.
+#' @details The `tipo` classification derives from `esco_v0101_reusetype`
+#'   alone; `pillar_softskills` and `esco_v0101_ict` are descriptive
+#'   pass-through flags. They are optional because the Lightcast `data_v2`
+#'   delivery consumed through `itaposts` no longer supplies them: data read
+#'   with [read_oja_itaposts()] yields `NA` in both columns, while
+#'   legacy sources that still carry the flags pass them through unchanged.
 #' @export
 build_skillist <- function(skills, diffusion) {
   check_columns(
@@ -116,8 +125,6 @@ build_skillist <- function(skills, diffusion) {
     c(
       "escoskill_level_3",
       "esco_v0101_reusetype",
-      "pillar_softskills",
-      "esco_v0101_ict",
       "esco_v0101_green",
       "esco_v0101_language"
     ),
@@ -129,17 +136,22 @@ build_skillist <- function(skills, diffusion) {
     caller = "build_skillist"
   )
 
-  skillist <- skills[,
-    .(N = .N),
-    .(
-      escoskill_level_3,
-      esco_v0101_reusetype,
-      pillar_softskills,
-      esco_v0101_ict,
-      esco_v0101_green,
-      esco_v0101_language
-    )
-  ]
+  meta_cols <- c(
+    "escoskill_level_3",
+    "esco_v0101_reusetype",
+    "pillar_softskills",
+    "esco_v0101_ict",
+    "esco_v0101_green",
+    "esco_v0101_language"
+  )
+  absent_cols <- setdiff(meta_cols, names(skills))
+
+  skillist <- skills[, .(N = .N), by = setdiff(meta_cols, absent_cols)]
+
+  if (length(absent_cols) > 0L) {
+    skillist[, (absent_cols) := NA_integer_]
+    data.table::setcolorder(skillist, meta_cols)
+  }
 
   skillist[,
     tipo := data.table::fcase(

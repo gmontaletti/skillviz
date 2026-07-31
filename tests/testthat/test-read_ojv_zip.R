@@ -507,3 +507,15 @@ test_that("result is a data.table, not a plain data.frame", {
 
   expect_true(data.table::is.data.table(result))
 })
+
+# 9. deprecation -----
+
+test_that("read_ojv_zip signals its deprecation", {
+  tmp <- withr::local_tempdir()
+  create_zip_fixture(tmp, make_postings(3), year = 2024, month = 1)
+
+  expect_warning(
+    read_ojv_zip(tmp, verbose = FALSE),
+    "read_ojv_zip.+deprecated"
+  )
+})

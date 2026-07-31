@@ -21,12 +21,13 @@ match_professions(
 
 \item{postings}{\code{data.table} con almeno le colonne \code{general_id} e
 \code{idesco_level_4}. Tipicamente ottenuto da
-\code{itaposts::oja_postings(con) |> dplyr::collect()}.}
+\code{read_oja_itaposts(con)$postings}: \code{itaposts::oja_postings()} da sola
+non espone \code{idesco_level_4}.}
 
 \item{skills_long}{\code{data.table} in formato lungo con almeno le colonne
 \code{general_id} e \code{idescoskill_level_3}. Una riga per coppia
 (annuncio, competenza). Tipicamente ottenuto da
-\code{itaposts::oja_skills(con) |> dplyr::collect()}.}
+\code{read_oja_itaposts(con)$skills}.}
 
 \item{basis}{Base del profilo professionale: \code{"coverage"} (default),
 \code{"tfidf"} oppure \code{"rca"}.}
@@ -41,8 +42,10 @@ scartate prima del calcolo. Default \code{30L}.}
 \item{skill_labels}{\code{data.table} opzionale con almeno le colonne
 \code{idescoskill_level_3} e \code{escoskill_level_3} (etichetta leggibile).
 Quando fornito, la tabella \code{per_skill} ottiene la colonna
-\code{skill_label}. Default \code{NULL}. Tipicamente ottenuto da
-\code{itaposts::oja_skill_dim(con) |> dplyr::collect()}.}
+\code{skill_label}. Default \code{NULL}. Tipicamente ottenuto
+deduplicando le due colonne su \code{read_oja_itaposts(con)$skills}:
+\code{itaposts::oja_skill_dim()} espone l'etichetta come
+\code{esco_v010200_label}, non come \code{escoskill_level_3}.}
 
 \item{weights}{Vettore numerico non negativo di pesi per le competenze
 in \code{skills}. Se \code{NULL} (default) tutte le competenze ricevono peso
@@ -130,18 +133,19 @@ uniforme \code{1} su ogni competenza dichiarata); sia \code{q} che le colonne di
 }
 \examples{
 \dontrun{
-con  <- itaposts::oja_connect()
+con <- itaposts::oja_connect()
 on.exit(itaposts::oja_disconnect(con), add = TRUE)
 
-post <- itaposts::oja_postings(con)  |> dplyr::collect() |> data.table::setDT()
-skil <- itaposts::oja_skills(con)    |> dplyr::collect() |> data.table::setDT()
-labs <- itaposts::oja_skill_dim(con) |> dplyr::collect() |> data.table::setDT()
+ojv <- skillviz::read_oja_itaposts(con)
+
+# le etichette leggibili viaggiano con le righe di skill
+labs <- unique(ojv$skills[, .(idescoskill_level_3, escoskill_level_3)])
 
 # convenience: end-to-end in una sola chiamata
 res <- skillviz::match_professions(
   skills       = c("S1.4.1", "S4.8.1", "S1.13.2"),
-  postings     = post,
-  skills_long  = skil,
+  postings     = ojv$postings,
+  skills_long  = ojv$skills,
   basis        = "coverage",
   top_n        = 10,
   skill_labels = labs
@@ -152,7 +156,7 @@ res$per_skill[idesco_level_4 == res$ranking$idesco_level_4[1L]]
 
 # prepara una volta, scoring molte volte
 prep <- skillviz::match_professions_prepare(
-  post, skil, basis = "coverage"
+  ojv$postings, ojv$skills, basis = "coverage"
 )
 res1 <- skillviz::match_professions_score(prep, c("S1.4.1", "S4.8.1"))
 res2 <- skillviz::match_professions_score(

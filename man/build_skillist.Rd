@@ -7,18 +7,29 @@
 build_skillist(skills, diffusion)
 }
 \arguments{
-\item{skills}{A \code{data.table} of skill occurrences with columns:
-\code{escoskill_level_3}, \code{esco_v0101_reusetype}, \code{pillar_softskills},
-\code{esco_v0101_ict}, \code{esco_v0101_green}, \code{esco_v0101_language}.}
+\item{skills}{A \code{data.table} of skill occurrences with required columns
+\code{escoskill_level_3}, \code{esco_v0101_reusetype}, \code{esco_v0101_green},
+\code{esco_v0101_language}, and the optional columns \code{pillar_softskills} and
+\code{esco_v0101_ict}.}
 
 \item{diffusion}{A \code{data.table} as returned by \code{\link[=compute_skill_diffusion]{compute_skill_diffusion()}},
 with columns \code{escoskill_level_3}, \code{N}, \code{tf}, \code{idf}, \code{diffusione}.}
 }
 \value{
 A \code{data.table} with one row per unique skill, including metadata
-columns, the Italian type label (\code{tipo}), and diffusion scores.
+columns, the Italian type label (\code{tipo}), and diffusion scores. The
+columns \code{pillar_softskills} and \code{esco_v0101_ict} are always present, and
+are \code{NA_integer_} when absent from \code{skills}.
 }
 \description{
 Aggregates skill metadata (reuse type, flag columns) and merges with diffusion
 scores. The ESCO reuse type labels are translated to Italian.
+}
+\details{
+The \code{tipo} classification derives from \code{esco_v0101_reusetype}
+alone; \code{pillar_softskills} and \code{esco_v0101_ict} are descriptive
+pass-through flags. They are optional because the Lightcast \code{data_v2}
+delivery consumed through \code{itaposts} no longer supplies them: data read
+with \code{\link[=read_oja_itaposts]{read_oja_itaposts()}} yields \code{NA} in both columns, while
+legacy sources that still carry the flags pass them through unchanged.
 }

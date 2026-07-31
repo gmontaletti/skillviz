@@ -268,3 +268,20 @@ test_that("verbose = FALSE suppresses deduplication message", {
     normalize_ojv(tmp, verbose = FALSE)
   )
 })
+
+# 8. deprecation -----
+
+test_that("normalize_ojv signals its deprecation once, not per inner read", {
+  tmp <- withr::local_tempdir()
+  setup_full_fixtures(
+    tmp,
+    make_postings_norm(1:3),
+    make_skills_norm(1:3),
+    make_companies_norm(1:3)
+  )
+
+  warnings <- testthat::capture_warnings(normalize_ojv(tmp, verbose = FALSE))
+
+  expect_length(warnings, 1L)
+  expect_match(warnings, "normalize_ojv.+deprecated")
+})

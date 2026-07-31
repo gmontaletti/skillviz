@@ -220,6 +220,113 @@ test_that("build_skillist translates reuse types to Italian", {
   expect_equal(result[escoskill_level_3 == "D", tipo], "multisettoriale")
 })
 
+test_that("build_skillist works without pillar_softskills/esco_v0101_ict", {
+  # itaposts data_v2 no longer supplies these two flags
+  skills <- data.table::data.table(
+    escoskill_level_3 = c("A", "A", "B", "B", "C"),
+    esco_v0101_reusetype = c(
+      "sector-specific",
+      "sector-specific",
+      "transversal",
+      "transversal",
+      "occupation-specific"
+    ),
+    esco_v0101_green = c(0L, 0L, 0L, 0L, 1L),
+    esco_v0101_language = c(0L, 0L, 0L, 0L, 0L)
+  )
+
+  diffusion <- data.table::data.table(
+    escoskill_level_3 = c("A", "B", "C"),
+    N = c(100L, 80L, 20L),
+    tf = c(50.0, 40.0, 10.0),
+    idf = c(0.5, 1.0, 2.0),
+    diffusione = c("alta", "centrale", "minima")
+  )
+
+  result <- build_skillist(skills, diffusion)
+
+  # all six metadata columns survive, in their canonical relative order
+  meta_cols <- c(
+    "escoskill_level_3",
+    "esco_v0101_reusetype",
+    "pillar_softskills",
+    "esco_v0101_ict",
+    "esco_v0101_green",
+    "esco_v0101_language"
+  )
+  expect_true(all(meta_cols %in% names(result)))
+  expect_equal(
+    names(result)[names(result) %in% meta_cols],
+    meta_cols
+  )
+  expect_equal(nrow(result), 3L)
+
+  # the two absent columns are NA_integer_, not dropped or zero-filled
+  expect_true(all(is.na(result$pillar_softskills)))
+  expect_true(all(is.na(result$esco_v0101_ict)))
+  expect_type(result$pillar_softskills, "integer")
+  expect_type(result$esco_v0101_ict, "integer")
+
+  # tipo classification still derives from esco_v0101_reusetype alone
+  expect_equal(result[escoskill_level_3 == "A", tipo], "settoriale")
+  expect_equal(result[escoskill_level_3 == "B", tipo], "trasversale")
+  expect_equal(result[escoskill_level_3 == "C", tipo], "specifico")
+
+  # counts and diffusion columns unaffected
+  expect_equal(result[escoskill_level_3 == "A", N], 100L)
+  expect_equal(result[escoskill_level_3 == "C", diffusione], "minima")
+})
+
+test_that("build_skillist tolerates only one of the two optional columns", {
+  skills <- data.table::data.table(
+    escoskill_level_3 = c("A", "B"),
+    esco_v0101_reusetype = c("transversal", "cross-sector"),
+    pillar_softskills = c(1L, 0L),
+    esco_v0101_green = c(0L, 1L),
+    esco_v0101_language = c(0L, 0L)
+  )
+
+  diffusion <- data.table::data.table(
+    escoskill_level_3 = c("A", "B"),
+    N = c(10L, 20L),
+    tf = c(30, 70),
+    idf = c(1, 2),
+    diffusione = c("alta", "centrale")
+  )
+
+  result <- build_skillist(skills, diffusion)
+
+  expect_equal(result$pillar_softskills, c(1L, 0L))
+  expect_true(all(is.na(result$esco_v0101_ict)))
+  expect_equal(result[escoskill_level_3 == "B", tipo], "multisettoriale")
+})
+
+test_that("build_skillist still requires the four non-optional columns", {
+  diffusion <- data.table::data.table(
+    escoskill_level_3 = "A",
+    N = 1L,
+    tf = 1,
+    idf = 1,
+    diffusione = "alta"
+  )
+  complete <- data.table::data.table(
+    escoskill_level_3 = "A",
+    esco_v0101_reusetype = "transversal",
+    esco_v0101_green = 0L,
+    esco_v0101_language = 0L
+  )
+
+  for (col in names(complete)) {
+    expect_error(
+      build_skillist(
+        complete[, setdiff(names(complete), col), with = FALSE],
+        diffusion
+      ),
+      paste0("missing required columns: ", col)
+    )
+  }
+})
+
 test_that("build_skillist errors on missing columns in skills", {
   bad_skills <- data.table::data.table(escoskill_level_3 = "A")
   diffusion <- data.table::data.table(
