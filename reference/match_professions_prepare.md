@@ -24,15 +24,15 @@ match_professions_prepare(
 - postings:
 
   `data.table` con almeno le colonne `general_id` e `idesco_level_4`.
-  Tipicamente ottenuto da
-  `itaposts::oja_postings(con) |> dplyr::collect()`.
+  Tipicamente ottenuto da `read_oja_itaposts(con)$postings`:
+  [`itaposts::oja_postings()`](https://rdrr.io/pkg/itaposts/man/oja_postings.html)
+  da sola non espone `idesco_level_4`.
 
 - skills_long:
 
   `data.table` in formato lungo con almeno le colonne `general_id` e
   `idescoskill_level_3`. Una riga per coppia (annuncio, competenza).
-  Tipicamente ottenuto da
-  `itaposts::oja_skills(con) |> dplyr::collect()`.
+  Tipicamente ottenuto da `read_oja_itaposts(con)$skills`.
 
 - basis:
 
@@ -115,16 +115,15 @@ per il wrapper end-to-end.
 
 ``` r
 if (FALSE) { # \dontrun{
-con  <- itaposts::oja_connect()
+con <- itaposts::oja_connect()
 on.exit(itaposts::oja_disconnect(con), add = TRUE)
 
-post <- itaposts::oja_postings(con)  |> dplyr::collect() |> data.table::setDT()
-skil <- itaposts::oja_skills(con)    |> dplyr::collect() |> data.table::setDT()
+ojv <- skillviz::read_oja_itaposts(con)
 
 # prepara una sola volta, riusa per molte query
 prep <- skillviz::match_professions_prepare(
-  postings = post,
-  skills_long = skil,
+  postings = ojv$postings,
+  skills_long = ojv$skills,
   basis = "coverage"
 )
 

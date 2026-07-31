@@ -5,6 +5,8 @@
 Functions for reading OJA data, ESCO mappings, and deduplicating
 announcements.
 
+- [`read_oja_itaposts()`](https://gmontaletti.github.io/skillviz/reference/read_oja_itaposts.md)
+  : Read normalized OJA data from the itaposts DuckDB store
 - [`read_esco_mapping()`](https://gmontaletti.github.io/skillviz/reference/read_esco_mapping.md)
   : Read CPI-ESCO mapping table
 - [`read_isco_groups()`](https://gmontaletti.github.io/skillviz/reference/read_isco_groups.md)

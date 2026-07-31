@@ -17,7 +17,7 @@ che dipende solo dalle tabelle postings e skills_long."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -69,14 +69,15 @@ che dipende solo dalle tabelle <code>postings</code> e <code>skills_long</code>.
 <dl><dt id="arg-postings">postings<a class="anchor" aria-label="anchor" href="#arg-postings"></a></dt>
 <dd><p><code>data.table</code> con almeno le colonne <code>general_id</code> e
 <code>idesco_level_4</code>. Tipicamente ottenuto da
-<code>itaposts::oja_postings(con) |&gt; dplyr::collect()</code>.</p></dd>
+<code>read_oja_itaposts(con)$postings</code>: <code><a href="https://rdrr.io/pkg/itaposts/man/oja_postings.html" class="external-link">itaposts::oja_postings()</a></code> da sola
+non espone <code>idesco_level_4</code>.</p></dd>
 
 
 <dt id="arg-skills-long">skills_long<a class="anchor" aria-label="anchor" href="#arg-skills-long"></a></dt>
 <dd><p><code>data.table</code> in formato lungo con almeno le colonne
 <code>general_id</code> e <code>idescoskill_level_3</code>. Una riga per coppia
 (annuncio, competenza). Tipicamente ottenuto da
-<code>itaposts::oja_skills(con) |&gt; dplyr::collect()</code>.</p></dd>
+<code>read_oja_itaposts(con)$skills</code>.</p></dd>
 
 
 <dt id="arg-basis">basis<a class="anchor" aria-label="anchor" href="#arg-basis"></a></dt>
@@ -150,16 +151,15 @@ partire da un prep, <code><a href="match_professions.html">match_professions()</
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="va">con</span>  <span class="op">&lt;-</span> <span class="fu">itaposts</span><span class="fu">::</span><span class="fu">oja_connect</span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu">itaposts</span><span class="fu">::</span><span class="fu">oja_disconnect</span><span class="op">(</span><span class="va">con</span><span class="op">)</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">con</span> <span class="op">&lt;-</span> <span class="fu">itaposts</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/itaposts/man/oja_connect.html" class="external-link">oja_connect</a></span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu">itaposts</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/itaposts/man/oja_disconnect.html" class="external-link">oja_disconnect</a></span><span class="op">(</span><span class="va">con</span><span class="op">)</span>, add <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="va">post</span> <span class="op">&lt;-</span> <span class="fu">itaposts</span><span class="fu">::</span><span class="fu">oja_postings</span><span class="op">(</span><span class="va">con</span><span class="op">)</span>  <span class="op">|&gt;</span> <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/compute.html" class="external-link">collect</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu">data.table</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/data.table/man/setDT.html" class="external-link">setDT</a></span><span class="op">(</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">skil</span> <span class="op">&lt;-</span> <span class="fu">itaposts</span><span class="fu">::</span><span class="fu">oja_skills</span><span class="op">(</span><span class="va">con</span><span class="op">)</span>    <span class="op">|&gt;</span> <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/compute.html" class="external-link">collect</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu">data.table</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/data.table/man/setDT.html" class="external-link">setDT</a></span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">ojv</span> <span class="op">&lt;-</span> <span class="fu">skillviz</span><span class="fu">::</span><span class="fu"><a href="read_oja_itaposts.html">read_oja_itaposts</a></span><span class="op">(</span><span class="va">con</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># prepara una sola volta, riusa per molte query</span></span></span>
 <span class="r-in"><span><span class="va">prep</span> <span class="op">&lt;-</span> <span class="fu">skillviz</span><span class="fu">::</span><span class="fu">match_professions_prepare</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  postings <span class="op">=</span> <span class="va">post</span>,</span></span>
-<span class="r-in"><span>  skills_long <span class="op">=</span> <span class="va">skil</span>,</span></span>
+<span class="r-in"><span>  postings <span class="op">=</span> <span class="va">ojv</span><span class="op">$</span><span class="va">postings</span>,</span></span>
+<span class="r-in"><span>  skills_long <span class="op">=</span> <span class="va">ojv</span><span class="op">$</span><span class="va">skills</span>,</span></span>
 <span class="r-in"><span>  basis <span class="op">=</span> <span class="st">"coverage"</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
@@ -178,7 +178,7 @@ partire da un prep, <code><a href="match_professions.html">match_professions()</
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

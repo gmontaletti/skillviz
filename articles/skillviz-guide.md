@@ -262,6 +262,13 @@ domain flags) with diffusion scores. The ESCO reuse type labels are
 translated to Italian (`settoriale`, `trasversale`, `specifico`,
 `multisettoriale`).
 
+The required input columns are `escoskill_level_3`,
+`esco_v0101_reusetype`, `esco_v0101_green` and `esco_v0101_language`.
+`pillar_softskills` and `esco_v0101_ict` are optional — present in the
+example below for illustration, but no longer supplied by the Lightcast
+`data_v2` delivery read through `itaposts`; when they are absent the
+output carries them as `NA`.
+
 ``` r
 
 # 1. skill metadata -----

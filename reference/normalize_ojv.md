@@ -58,6 +58,20 @@ Deduplication keeps the most recent observation per `general_id`,
 determined by `year_grab_date` and `month_grab_date` columns (descending
 sort). If these columns are absent, the first occurrence is kept.
 
+**Deprecated**. Use
+[`read_oja_itaposts`](https://gmontaletti.github.io/skillviz/reference/read_oja_itaposts.md)
+instead. Reading the raw Lightcast ZIP archives is superseded by the
+DuckDB store maintained by the itaposts package, which performs the same
+dedup and referential-integrity steps at ingest time. The replacement
+returns the same `list(postings, skills, companies)` shape, so call
+sites only need their data-loading line changed. Retained for backward
+compatibility; scheduled for removal in a future release.
+
+## See also
+
+[`read_oja_itaposts`](https://gmontaletti.github.io/skillviz/reference/read_oja_itaposts.md)
+for the supported replacement.
+
 ## Examples
 
 ``` r

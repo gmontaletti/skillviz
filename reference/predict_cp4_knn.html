@@ -15,7 +15,7 @@ sector boosting that gives higher weight to same-sector neighbors."></head><body
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -62,7 +62,9 @@ sector boosting that gives higher weight to same-sector neighbors.</p>
 <dd><p>A data.table with columns: <code>general_id</code> (character),
 <code>idesco_level_4</code> (integer or character), <code>cp2021_id_level_4</code> (character,
 NA for unlabeled rows). Optionally includes <code>idsector</code> (character) for
-sector boosting.</p></dd>
+sector boosting. Only <code>NA</code> disables the boost for a row: itaposts stores an
+unknown sector as the empty string, so two announcements of unknown sector
+count as same-sector. That is deliberate, see Details.</p></dd>
 
 
 <dt id="arg-skills">skills<a class="anchor" aria-label="anchor" href="#arg-skills"></a></dt>
@@ -117,7 +119,18 @@ code (<code>method = "frequency"</code>).</p></li>
 <li><p>If the ESCO code is not present in labeled data, return NA
 (<code>method = "no_match"</code>).</p></li>
 </ol><p>Validated on 2025 OJA data (80/20 stratified split): CP4 accuracy 83.0%
-with k=7 and sector_boost=3.0, vs 62.6% frequency baseline.</p>
+with k=7 and sector_boost=3.0, vs 62.6% frequency baseline. Re-swept on the
+24-month production window (7x7 grid over k and sector_boost, 5 stratified
+splits, <code>skillviz_workflow/run_cp4_hyperparameter_sweep.R</code>): CP4 accuracy
+80.29% with k=7 and sector_boost=5.0, vs 59.1% frequency baseline. The
+single-year figure is the easier setting; prefer the windowed one when
+comparing against pipeline output.</p>
+<p>An unknown <code>idsector</code> arrives from itaposts as the empty string, never as
+NA, so unknown-sector announcements boost each other. Normalising the empty
+string to NA was measured and <strong>reduces</strong> accuracy: -1.51 pp on the 2.8% of
+announcements it affects (78.09% -&gt; 76.59%) and -0.04 pp overall, on 5 of 5
+splits. Missing sector is itself predictive of the occupation, so the
+behaviour is kept on purpose – do not "fix" it without re-measuring.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -155,7 +168,7 @@ ESCO-to-CPI3 mapping.</p></div>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

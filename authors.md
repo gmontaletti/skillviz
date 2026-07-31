@@ -11,13 +11,13 @@ Source:
 [`DESCRIPTION`](https://github.com/gmontaletti/skillviz/blob/main/DESCRIPTION)
 
 Montaletti G (2026). *skillviz: Skill Co-Occurrence Analysis and
-Visualization from Online Job Advertisements*. R package version 0.1.0,
+Visualization from Online Job Advertisements*. R package version 0.2.0,
 <https://gmontaletti.github.io/skillviz/>.
 
     @Manual{,
       title = {skillviz: Skill Co-Occurrence Analysis and Visualization from Online Job Advertisements},
       author = {Giampaolo Montaletti},
       year = {2026},
-      note = {R package version 0.1.0},
+      note = {R package version 0.2.0},
       url = {https://gmontaletti.github.io/skillviz/},
     }

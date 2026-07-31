@@ -32,15 +32,15 @@ match_professions(
 - postings:
 
   `data.table` con almeno le colonne `general_id` e `idesco_level_4`.
-  Tipicamente ottenuto da
-  `itaposts::oja_postings(con) |> dplyr::collect()`.
+  Tipicamente ottenuto da `read_oja_itaposts(con)$postings`:
+  [`itaposts::oja_postings()`](https://rdrr.io/pkg/itaposts/man/oja_postings.html)
+  da sola non espone `idesco_level_4`.
 
 - skills_long:
 
   `data.table` in formato lungo con almeno le colonne `general_id` e
   `idescoskill_level_3`. Una riga per coppia (annuncio, competenza).
-  Tipicamente ottenuto da
-  `itaposts::oja_skills(con) |> dplyr::collect()`.
+  Tipicamente ottenuto da `read_oja_itaposts(con)$skills`.
 
 - basis:
 
@@ -63,8 +63,11 @@ match_professions(
   `data.table` opzionale con almeno le colonne `idescoskill_level_3` e
   `escoskill_level_3` (etichetta leggibile). Quando fornito, la tabella
   `per_skill` ottiene la colonna `skill_label`. Default `NULL`.
-  Tipicamente ottenuto da
-  `itaposts::oja_skill_dim(con) |> dplyr::collect()`.
+  Tipicamente ottenuto deduplicando le due colonne su
+  `read_oja_itaposts(con)$skills`:
+  [`itaposts::oja_skill_dim()`](https://rdrr.io/pkg/itaposts/man/oja_skill_dim.html)
+  espone l'etichetta come `esco_v010200_label`, non come
+  `escoskill_level_3`.
 
 - weights:
 
@@ -187,18 +190,19 @@ per la matrice competenze x professioni.
 
 ``` r
 if (FALSE) { # \dontrun{
-con  <- itaposts::oja_connect()
+con <- itaposts::oja_connect()
 on.exit(itaposts::oja_disconnect(con), add = TRUE)
 
-post <- itaposts::oja_postings(con)  |> dplyr::collect() |> data.table::setDT()
-skil <- itaposts::oja_skills(con)    |> dplyr::collect() |> data.table::setDT()
-labs <- itaposts::oja_skill_dim(con) |> dplyr::collect() |> data.table::setDT()
+ojv <- skillviz::read_oja_itaposts(con)
+
+# le etichette leggibili viaggiano con le righe di skill
+labs <- unique(ojv$skills[, .(idescoskill_level_3, escoskill_level_3)])
 
 # convenience: end-to-end in una sola chiamata
 res <- skillviz::match_professions(
   skills       = c("S1.4.1", "S4.8.1", "S1.13.2"),
-  postings     = post,
-  skills_long  = skil,
+  postings     = ojv$postings,
+  skills_long  = ojv$skills,
   basis        = "coverage",
   top_n        = 10,
   skill_labels = labs
@@ -209,7 +213,7 @@ res$per_skill[idesco_level_4 == res$ranking$idesco_level_4[1L]]
 
 # prepara una volta, scoring molte volte
 prep <- skillviz::match_professions_prepare(
-  post, skil, basis = "coverage"
+  ojv$postings, ojv$skills, basis = "coverage"
 )
 res1 <- skillviz::match_professions_score(prep, c("S1.4.1", "S4.8.1"))
 res2 <- skillviz::match_professions_score(

@@ -105,13 +105,16 @@ per il wrapper end-to-end.
 
 ``` r
 if (FALSE) { # \dontrun{
-con  <- itaposts::oja_connect()
+con <- itaposts::oja_connect()
 on.exit(itaposts::oja_disconnect(con), add = TRUE)
 
-post <- itaposts::oja_postings(con) |> dplyr::collect() |> data.table::setDT()
-skil <- itaposts::oja_skills(con)   |> dplyr::collect() |> data.table::setDT()
+ojv <- skillviz::read_oja_itaposts(con)
 
-prep <- skillviz::match_professions_prepare(post, skil, basis = "coverage")
+prep <- skillviz::match_professions_prepare(
+  ojv$postings,
+  ojv$skills,
+  basis = "coverage"
+)
 
 # query non pesata (uniforme)
 res_uniform <- skillviz::match_professions_score(

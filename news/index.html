@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -33,10 +33,48 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.2.0" id="skillviz-020">skillviz 0.2.0<a class="anchor" aria-label="anchor" href="#skillviz-020"></a></h2>
+<div class="section level3">
+<h3 id="lettura-dei-dati-oja-da-itaposts-0-2-0">Lettura dei dati OJA da itaposts<a class="anchor" aria-label="anchor" href="#lettura-dei-dati-oja-da-itaposts-0-2-0"></a></h3>
+<ul><li>Nuova dipendenza formale da <code>itaposts</code> (<code>Imports</code>, installato tramite <code>Remotes: gmontaletti/itaposts</code>), che centralizza import, normalizzazione e archiviazione dei dati OJA nello store DuckDB condiviso.</li>
+<li>
+<code><a href="../reference/read_oja_itaposts.html">read_oja_itaposts()</a></code> — nuova funzione, modalità raccomandata per caricare i dati OJA in skillviz. Delega a <code><a href="https://rdrr.io/pkg/itaposts/man/oja_normalised.html" class="external-link">itaposts::oja_normalised()</a></code> e restituisce la stessa lista a tre elementi <code>list(postings, skills, companies)</code> prodotta da <code><a href="../reference/normalize_ojv.html">normalize_ojv()</a></code>, con le tre tabelle chiavate su <code>general_id</code>. La connessione resta a carico del chiamante, secondo l’idioma itaposts (<code><a href="https://rdrr.io/pkg/itaposts/man/oja_connect.html" class="external-link">itaposts::oja_connect()</a></code> / <code><a href="https://rdrr.io/pkg/itaposts/man/oja_disconnect.html" class="external-link">itaposts::oja_disconnect()</a></code>). Accetta i filtri <code>snapshots</code>, <code>region_code</code>, <code>years</code> e <code>months</code>.</li>
+<li>Le colonne di skill che itaposts riemette con i nomi maiuscoli storici Lightcast (<code>ESCOSKILL_LEVEL_3</code>, <code>ESCO_V0101_REUSETYPE</code>, <code>ESCO_V0101_GREEN</code>, <code>ESCO_V0101_LANGUAGE</code>, …) vengono convertite in minuscolo, i nomi già attesi dal resto del pacchetto. Solo le colonne effettivamente presenti vengono rinominate, quindi la funzione tollera variazioni nell’insieme di colonne esposto da itaposts.</li>
+<li>Gli esempi di <code><a href="../reference/match_professions.html">match_professions()</a></code>, <code><a href="../reference/match_professions_prepare.html">match_professions_prepare()</a></code> e <code><a href="../reference/match_professions_score.html">match_professions_score()</a></code> usano <code><a href="../reference/read_oja_itaposts.html">read_oja_itaposts()</a></code>: le chiamate dirette a <code><a href="https://rdrr.io/pkg/itaposts/man/oja_postings.html" class="external-link">itaposts::oja_postings()</a></code> che vi figuravano non espongono <code>idesco_level_4</code>, richiesto da queste funzioni.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="colonne-pillar_softskills-e-esco_v0101_ict-opzionali-0-2-0">Colonne <code>pillar_softskills</code> e <code>esco_v0101_ict</code> opzionali<a class="anchor" aria-label="anchor" href="#colonne-pillar_softskills-e-esco_v0101_ict-opzionali-0-2-0"></a></h3>
+<ul><li>
+<code><a href="../reference/build_skillist.html">build_skillist()</a></code> non richiede più <code>pillar_softskills</code> e <code>esco_v0101_ict</code> fra le colonne di <code>skills</code>. Le due colonne restano sempre presenti nell’output e valgono <code>NA_integer_</code> quando assenti in input; la classificazione <code>tipo</code> deriva dal solo <code>esco_v0101_reusetype</code> e non cambia. Le sorgenti che ancora portano i due flag li propagano invariati.</li>
+<li>La modifica segue la migrazione <code>data_v2</code> di <code>itaposts</code>: il fornitore ha rimosso i due flag dalla consegna e non esiste alcun sostituto. I dati letti con <code><a href="../reference/read_oja_itaposts.html">read_oja_itaposts()</a></code> riportano quindi <code>NA</code> in entrambe le colonne.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="deprecazioni-0-2-0">Deprecazioni<a class="anchor" aria-label="anchor" href="#deprecazioni-0-2-0"></a></h3>
+<ul><li>
+<code><a href="../reference/read_ojv_zip.html">read_ojv_zip()</a></code> e <code><a href="../reference/normalize_ojv.html">normalize_ojv()</a></code> sono deprecate in favore di <code><a href="../reference/read_oja_itaposts.html">read_oja_itaposts()</a></code>. Le due funzioni continuano a operare ed emettono un avviso di deprecazione; la lettura diretta degli archivi ZIP Lightcast è superata dallo store DuckDB di <code>itaposts</code>, che possiede la stessa logica di lettura, deduplicazione e join. La rimozione è prevista in una versione futura, non prima di una MINOR successiva.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="api-split-per-scoring-veloce-0-2-0">API split per scoring veloce<a class="anchor" aria-label="anchor" href="#api-split-per-scoring-veloce-0-2-0"></a></h3>
+<ul><li>
+<code><a href="../reference/match_professions_prepare.html">match_professions_prepare()</a></code> e <code><a href="../reference/match_professions_score.html">match_professions_score()</a></code> separano la costruzione della matrice professione × competenza (operazione costosa, invariante rispetto alla query) dal calcolo della distanza rispetto a un insieme di competenze dichiarate (operazione leggera, sparsa). Il wrapper <code><a href="../reference/match_professions.html">match_professions()</a></code> resta invariato per backward compatibility e delega a entrambi internamente. Usare il pattern split nelle interfacce reattive che valutano molte query sulla stessa base.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="query-pesata-0-2-0">Query pesata<a class="anchor" aria-label="anchor" href="#query-pesata-0-2-0"></a></h3>
+<ul><li>
+<code><a href="../reference/match_professions_score.html">match_professions_score()</a></code> e <code><a href="../reference/match_professions.html">match_professions()</a></code> accettano l’argomento <code>weights</code> (numerico, non negativo, una entry per ogni competenza dichiarata). I pesi modulano la massa L2 del vettore di query; con pesi uniformi a 1 il comportamento coincide bit-per-bit con la versione non pesata. I denominatori di <code>hit_ratio</code> e <code>mean_coverage</code> usano la somma dei pesi al quadrato per mantenere coerenza dimensionale.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="nuove-funzionalità-0-2-0">Nuove funzionalità<a class="anchor" aria-label="anchor" href="#nuove-funzionalit%C3%A0-0-2-0"></a></h3>
+<ul><li>
+<code><a href="../reference/match_professions.html">match_professions()</a></code> — a partire da un vettore di identificativi ESCO L3 dichiarati, classifica le professioni ESCO L4 per affinità al profilo desiderato. Restituisce una graduatoria con distanza coseno complessiva e la decomposizione additiva del contributo di ogni competenza alla distanza totale. Tre basi di profilo selezionabili: <code>coverage</code> (probabilità che un annuncio della professione richieda la competenza), <code>tfidf</code> (term frequency per professione × inverse document frequency, pesa le competenze discriminanti) e <code>rca</code> (indice di Balassa, misura di specializzazione). Riusa <code><a href="../reference/build_skill_prof_sparse.html">build_skill_prof_sparse()</a></code> per la matrice sparsa professioni × competenze e <code><a href="../reference/compute_balassa_index.html">compute_balassa_index()</a></code> per la base RCA.</li>
+</ul></div>
+</div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.0" id="skillviz-010">skillviz 0.1.0<a class="anchor" aria-label="anchor" href="#skillviz-010"></a></h2>
 <p>Versione iniziale.</p>
 </div>
-  </main></div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">
@@ -44,7 +82,7 @@
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

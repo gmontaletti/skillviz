@@ -68,6 +68,13 @@ ZIP files are expected to follow the naming pattern
 `ITC4_{year}_{month}_{type}.zip` where `type` is one of `"postings"`,
 `"skills"`, or `"postings_raw"`.
 
+**Deprecated**. Use
+[`read_oja_itaposts`](https://gmontaletti.github.io/skillviz/reference/read_oja_itaposts.md)
+instead. Reading the raw Lightcast ZIP archives is superseded by the
+DuckDB store maintained by the itaposts package, which owns the read,
+dedup and join logic this function duplicates. Retained for backward
+compatibility; scheduled for removal in a future release.
+
 The function uses
 [`data.table::fread()`](https://rdrr.io/pkg/data.table/man/fread.html)
 with the `cmd` argument to pipe `unzip -p` output directly, avoiding
@@ -89,6 +96,11 @@ The three file types correspond to different OJV datasets:
 - postings_raw:
 
   Minimal posting data with company name.
+
+## See also
+
+[`read_oja_itaposts`](https://gmontaletti.github.io/skillviz/reference/read_oja_itaposts.md)
+for the supported replacement.
 
 ## Examples
 
