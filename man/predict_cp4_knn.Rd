@@ -10,7 +10,9 @@ predict_cp4_knn(postings, skills, k = 7L, sector_boost = 3, verbose = TRUE)
 \item{postings}{A data.table with columns: \code{general_id} (character),
 \code{idesco_level_4} (integer or character), \code{cp2021_id_level_4} (character,
 NA for unlabeled rows). Optionally includes \code{idsector} (character) for
-sector boosting.}
+sector boosting. Only \code{NA} disables the boost for a row: itaposts stores an
+unknown sector as the empty string, so two announcements of unknown sector
+count as same-sector. That is deliberate, see Details.}
 
 \item{skills}{A data.table with columns: \code{general_id} (character),
 \code{escoskill_level_3} (character).}
@@ -59,7 +61,19 @@ code (\code{method = "frequency"}).
 }
 
 Validated on 2025 OJA data (80/20 stratified split): CP4 accuracy 83.0\%
-with k=7 and sector_boost=3.0, vs 62.6\% frequency baseline.
+with k=7 and sector_boost=3.0, vs 62.6\% frequency baseline. Re-swept on the
+24-month production window (7x7 grid over k and sector_boost, 5 stratified
+splits, \code{skillviz_workflow/run_cp4_hyperparameter_sweep.R}): CP4 accuracy
+80.29\% with k=7 and sector_boost=5.0, vs 59.1\% frequency baseline. The
+single-year figure is the easier setting; prefer the windowed one when
+comparing against pipeline output.
+
+An unknown \code{idsector} arrives from itaposts as the empty string, never as
+NA, so unknown-sector announcements boost each other. Normalising the empty
+string to NA was measured and \strong{reduces} accuracy: -1.51 pp on the 2.8\% of
+announcements it affects (78.09\% -> 76.59\%) and -0.04 pp overall, on 5 of 5
+splits. Missing sector is itself predictive of the occupation, so the
+behaviour is kept on purpose -- do not "fix" it without re-measuring.
 }
 \examples{
 postings <- data.table::data.table(

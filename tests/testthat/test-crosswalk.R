@@ -233,6 +233,66 @@ test_that("predict_cp4_knn works without idsector column", {
   )
 })
 
+test_that("predict_cp4_knn boosts an empty idsector as a sector of its own", {
+  # itaposts writes an unknown sector as "" and never as NA, so unknown-sector
+  # announcements boost each other. Normalising "" to NA was measured on the
+  # 24-month window and costs 1.51 pp on the rows it touches, so the behaviour
+  # is deliberate; this pins it against a well-meant "fix".
+  postings <- data.table::data.table(
+    general_id = as.character(1:8),
+    idesco_level_4 = rep(1000L, 8),
+    cp2021_id_level_4 = c(
+      "1.1.1.1",
+      "1.1.1.1",
+      "1.1.1.2",
+      "1.1.1.2",
+      "1.1.1.2",
+      "1.1.1.2",
+      NA,
+      NA
+    ),
+    idsector = c("", "", "C", "C", "C", "C", "", "C")
+  )
+  skills <- data.table::data.table(
+    general_id = as.character(rep(1:8, each = 2)),
+    escoskill_level_3 = rep(c("a", "b"), 8)
+  )
+
+  result <- predict_cp4_knn(
+    postings,
+    skills,
+    k = 6L,
+    sector_boost = 5,
+    verbose = FALSE
+  )
+
+  # Every row carries identical skills, so Jaccard alone would hand both test
+  # rows the 1.1.1.2 majority; only the sector boost can split them.
+  expect_identical(
+    result[general_id == "7", cp2021_id_level_4],
+    "1.1.1.1"
+  )
+  expect_identical(
+    result[general_id == "8", cp2021_id_level_4],
+    "1.1.1.2"
+  )
+
+  # An NA sector must still switch the boost off for that row.
+  postings_na <- data.table::copy(postings)
+  postings_na[!nzchar(idsector), idsector := NA_character_]
+  result_na <- predict_cp4_knn(
+    postings_na,
+    skills,
+    k = 6L,
+    sector_boost = 5,
+    verbose = FALSE
+  )
+  expect_identical(
+    result_na[general_id == "7", cp2021_id_level_4],
+    "1.1.1.2"
+  )
+})
+
 test_that("predict_cp4_knn returns empty table when no unlabeled rows", {
   postings <- data.table::data.table(
     general_id = as.character(1:3),
