@@ -9,7 +9,16 @@ sector boosting that gives higher weight to same-sector neighbors.
 ## Usage
 
 ``` r
-predict_cp4_knn(postings, skills, k = 7L, sector_boost = 3, verbose = TRUE)
+predict_cp4_knn(
+  postings,
+  skills,
+  k = 7L,
+  sector_boost = 3,
+  rescue_no_match = FALSE,
+  rescue_k = 10L,
+  rescue_max_train = 200000L,
+  verbose = TRUE
+)
 ```
 
 ## Arguments
@@ -37,6 +46,28 @@ predict_cp4_knn(postings, skills, k = 7L, sector_boost = 3, verbose = TRUE)
   Numeric multiplier for same-sector neighbors in the weighted vote. Set
   to 1.0 to disable sector boosting (default 3.0).
 
+- rescue_no_match:
+
+  Logical: when TRUE, announcements that would be `no_match` for want of
+  an `idesco_level_4` but that do carry skills are classified by an
+  unrestricted k-NN over the whole labeled pool, and returned with
+  `method = "knn_global"`. Defaults to FALSE, which reproduces the
+  previous behaviour exactly. See Details for measured accuracy: these
+  predictions are markedly less accurate than the ESCO-restricted ones,
+  so `confidence` should be used to filter them.
+
+- rescue_k:
+
+  Integer number of neighbors for the rescue pass (default 10). Only
+  used when `rescue_no_match = TRUE`.
+
+- rescue_max_train:
+
+  Integer cap on the labeled pool used by the rescue pass (default
+  200000). The pool is subsampled by a deterministic stride over
+  `general_id`, so results are reproducible and the RNG is untouched.
+  Raising it improves accuracy at roughly linear cost in time.
+
 - verbose:
 
   Logical: print progress messages (default TRUE).
@@ -59,7 +90,8 @@ A data.table with columns:
 
 - method:
 
-  One of `"knn"`, `"frequency"`, `"single_candidate"`, `"no_match"`.
+  One of `"knn"`, `"frequency"`, `"single_candidate"`, `"no_match"`, or
+  `"knn_global"` when `rescue_no_match = TRUE`.
 
 ## Details
 
@@ -140,6 +172,34 @@ The length effect is real but is not a kernel problem. Long queries are
 twin-poor: top-1 similarity 0.45 with 0.2% exact twins at 21+ skills,
 against 0.76 and 48% at 1-4 skills. No kernel invents a neighbour that
 does not exist.
+
+`rescue_no_match = TRUE` addresses a different population: the 13.1% of
+unlabeled rows that carry no `idesco_level_4`, so there is no candidate
+set to restrict to. 94.4% of them do have skills and all have an
+`idsector`. Validation used the population analogue rather than a
+simulation – 45,029 *labeled* rows also lack an ESCO code, so they carry
+ground truth in the target's shape
+(`skillviz_workflow/run_cp4_no_match_rescue.R`). Unrestricted k-NN at
+`rescue_k = 10` with `sector_boost = 5` scores 68.8% CP4 / 74.0% CP3
+there, against 36.6% for CP4-centroid cosine, 19.4% for sector-modal and
+3.8% for global-modal; reweighted to the target's length distribution,
+which is longer than the analogue's, the expected figure is **73.8% CP4
+/ 77.8% CP3**. That is well below the 86.1% of the ESCO-restricted path,
+which is why the argument defaults to FALSE and why `confidence` matters
+here.
+
+Confidence is well calibrated on this population and is the intended
+filter: the top 10% of rescued rows by confidence is 99.1% accurate, the
+top 30% 96.8%, the top 50% 91.1%. Accuracy also rises steeply with
+posting length, from 44.3% at 1-4 skills to 91.9% at 21+. The
+high-confidence slice is not an artefact of near-duplicate retrieval:
+exact skill-set twins are 61.3% of this population but score *worse*
+than non-twins (66.4% vs 71.8%), because a short skill set has many
+twins without determining the occupation.
+
+The rescue pass reads accuracy from a pool capped at `rescue_max_train`.
+Accuracy was still climbing with pool size when measured (+2.0 pp from
+200k to 400k), so the default 200000 trades some accuracy for runtime.
 
 An unknown `idsector` arrives from itaposts as the empty string, never
 as NA, so unknown-sector announcements boost each other. Normalising the

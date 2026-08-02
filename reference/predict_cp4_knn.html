@@ -51,7 +51,16 @@ sector boosting that gives higher weight to same-sector neighbors.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">predict_cp4_knn</span><span class="op">(</span><span class="va">postings</span>, <span class="va">skills</span>, k <span class="op">=</span> <span class="fl">7L</span>, sector_boost <span class="op">=</span> <span class="fl">3</span>, verbose <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">predict_cp4_knn</span><span class="op">(</span></span>
+<span>  <span class="va">postings</span>,</span>
+<span>  <span class="va">skills</span>,</span>
+<span>  k <span class="op">=</span> <span class="fl">7L</span>,</span>
+<span>  sector_boost <span class="op">=</span> <span class="fl">3</span>,</span>
+<span>  rescue_no_match <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  rescue_k <span class="op">=</span> <span class="fl">10L</span>,</span>
+<span>  rescue_max_train <span class="op">=</span> <span class="fl">200000L</span>,</span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -81,6 +90,28 @@ count as same-sector. That is deliberate, see Details.</p></dd>
 weighted vote. Set to 1.0 to disable sector boosting (default 3.0).</p></dd>
 
 
+<dt id="arg-rescue-no-match">rescue_no_match<a class="anchor" aria-label="anchor" href="#arg-rescue-no-match"></a></dt>
+<dd><p>Logical: when TRUE, announcements that would be
+<code>no_match</code> for want of an <code>idesco_level_4</code> but that do carry skills are
+classified by an unrestricted k-NN over the whole labeled pool, and
+returned with <code>method = "knn_global"</code>. Defaults to FALSE, which reproduces
+the previous behaviour exactly. See Details for measured accuracy: these
+predictions are markedly less accurate than the ESCO-restricted ones, so
+<code>confidence</code> should be used to filter them.</p></dd>
+
+
+<dt id="arg-rescue-k">rescue_k<a class="anchor" aria-label="anchor" href="#arg-rescue-k"></a></dt>
+<dd><p>Integer number of neighbors for the rescue pass (default
+10). Only used when <code>rescue_no_match = TRUE</code>.</p></dd>
+
+
+<dt id="arg-rescue-max-train">rescue_max_train<a class="anchor" aria-label="anchor" href="#arg-rescue-max-train"></a></dt>
+<dd><p>Integer cap on the labeled pool used by the rescue
+pass (default 200000). The pool is subsampled by a deterministic stride
+over <code>general_id</code>, so results are reproducible and the RNG is untouched.
+Raising it improves accuracy at roughly linear cost in time.</p></dd>
+
+
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>Logical: print progress messages (default TRUE).</p></dd>
 
@@ -98,7 +129,7 @@ weighted vote. Set to 1.0 to disable sector boosting (default 3.0).</p></dd>
 
 <dt>method</dt>
 <dd><p>One of <code>"knn"</code>, <code>"frequency"</code>, <code>"single_candidate"</code>,
-<code>"no_match"</code>.</p></dd>
+<code>"no_match"</code>, or <code>"knn_global"</code> when <code>rescue_no_match = TRUE</code>.</p></dd>
 
 
 </dl></div>
@@ -165,6 +196,28 @@ neighbours and lets a 2-skill posting contained in a 28-skill query score
 twin-poor: top-1 similarity 0.45 with 0.2% exact twins at 21+ skills,
 against 0.76 and 48% at 1-4 skills. No kernel invents a neighbour that does
 not exist.</p>
+<p><code>rescue_no_match = TRUE</code> addresses a different population: the 13.1% of
+unlabeled rows that carry no <code>idesco_level_4</code>, so there is no candidate set
+to restrict to. 94.4% of them do have skills and all have an <code>idsector</code>.
+Validation used the population analogue rather than a simulation – 45,029
+<em>labeled</em> rows also lack an ESCO code, so they carry ground truth in the
+target's shape (<code>skillviz_workflow/run_cp4_no_match_rescue.R</code>). Unrestricted
+k-NN at <code>rescue_k = 10</code> with <code>sector_boost = 5</code> scores 68.8% CP4 / 74.0% CP3
+there, against 36.6% for CP4-centroid cosine, 19.4% for sector-modal and
+3.8% for global-modal; reweighted to the target's length distribution, which
+is longer than the analogue's, the expected figure is <strong>73.8% CP4 / 77.8%
+CP3</strong>. That is well below the 86.1% of the ESCO-restricted path, which is
+why the argument defaults to FALSE and why <code>confidence</code> matters here.</p>
+<p>Confidence is well calibrated on this population and is the intended filter:
+the top 10% of rescued rows by confidence is 99.1% accurate, the top 30%
+96.8%, the top 50% 91.1%. Accuracy also rises steeply with posting length,
+from 44.3% at 1-4 skills to 91.9% at 21+. The high-confidence slice is not
+an artefact of near-duplicate retrieval: exact skill-set twins are 61.3% of
+this population but score <em>worse</em> than non-twins (66.4% vs 71.8%), because a
+short skill set has many twins without determining the occupation.</p>
+<p>The rescue pass reads accuracy from a pool capped at <code>rescue_max_train</code>.
+Accuracy was still climbing with pool size when measured (+2.0 pp from 200k
+to 400k), so the default 200000 trades some accuracy for runtime.</p>
 <p>An unknown <code>idsector</code> arrives from itaposts as the empty string, never as
 NA, so unknown-sector announcements boost each other. Normalising the empty
 string to NA was measured and <strong>reduces</strong> accuracy: -1.51 pp on the 2.8% of
