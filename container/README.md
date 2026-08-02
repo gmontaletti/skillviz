@@ -108,13 +108,17 @@ immediately, and the in-container lock file detects a stale PID with `ps`.
 
 ## Two constraints worth knowing
 
-**The 24-month window is not arbitrary.** `predict_cp4_knn()` subsamples any ESCO
-group above 50,000 labelled rows using an *unseeded* `sample.int()`. Over 24
-months no group reaches that (largest measured: 42,530). Over the full 42 months
-of available history, two groups exceed it, and the written output would differ
-between runs on identical input. The job checks this before imputing and refuses
-to run rather than write something irreproducible. Raising `IMPUTE_WINDOW_MONTHS`
-therefore requires parameterising that cap in the package first.
+**The training cap fires, and the job tells you.** `predict_cp4_knn()` caps each
+ESCO group's training pool at `IMPUTE_MAX_TRAIN` (default 50,000). That cap is
+reached on the 24-month window — ESCO group 5223 carries about 52,700 labelled
+rows. Groups above it are subsampled by a *deterministic stride*, so the result
+is reproducible; raising `IMPUTE_MAX_TRAIN` uses them whole at proportionally
+higher memory, since the dense `test x train` block grows with it. The job logs
+how many groups are affected on every run.
+
+This was originally an unseeded `sample.int()`, which meant two pipeline runs on
+identical input returned different predictions for that group. Building this
+container is what surfaced it; the fix is in `predict_cp4_knn()` itself.
 
 **`general_id` is not unique in the source** — 4.17M rows against 3.27M distinct
 ids, though no id spans two months. The read deduplicates on the latest grab

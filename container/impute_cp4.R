@@ -131,9 +131,9 @@ cfg <- list(
   rescue_k = getenv_int("IMPUTE_RESCUE_K", 10L),
   rescue_max_train = getenv_int("IMPUTE_RESCUE_MAX_TRAIN", 400000L),
   dry_run = getenv_flag("IMPUTE_DRY_RUN", FALSE),
-  # Beyond this the unseeded 50k subsample in .jaccard_knn_vote() starts firing
-  # and the written output stops being reproducible run to run.
-  max_group = getenv_int("IMPUTE_MAX_ESCO_GROUP", 50000L),
+  # Per-ESCO-group training cap. The subsample is a deterministic stride, so
+  # exceeding it costs training data but not reproducibility.
+  max_train = getenv_int("IMPUTE_MAX_TRAIN", 50000L),
   lock_dir = getenv_default("IMPUTE_LOCK_DIR", tempdir())
 )
 
@@ -534,22 +534,25 @@ main <- function() {
   skills <- read_skills(con, ym_from, ym_to, postings$general_id)
   .info("skills: ", nrow(skills), " assignments")
 
-  # -- reproducibility guard --
+  # -- training-cap visibility --
+  # predict_cp4_knn() subsamples groups above max_train by a deterministic
+  # stride, so exceeding the cap costs training data but not reproducibility.
+  # Report it instead of aborting and let the operator decide.
   grp <- postings[
     !is.na(cp2021_id_level_4) & !is.na(idesco_level_4),
     .N,
     by = idesco_level_4
   ]
-  if (nrow(grp) && max(grp$N) > cfg$max_group) {
-    .die(
-      1L,
-      "largest ESCO group has ",
-      max(grp$N),
-      " labelled rows, above the ",
-      cfg$max_group,
-      " cap that predict_cp4_knn() subsamples with an unseeded ",
-      "sample.int(). Output would not be reproducible. Reduce ",
-      "IMPUTE_WINDOW_MONTHS or parameterise the cap first."
+  if (nrow(grp) && max(grp$N) > cfg$max_train) {
+    over <- grp[N > cfg$max_train]
+    .warn(
+      nrow(over),
+      " ESCO group(s) exceed IMPUTE_MAX_TRAIN=",
+      cfg$max_train,
+      " (largest ",
+      max(over$N),
+      "); they are subsampled by a deterministic stride. Raise ",
+      "IMPUTE_MAX_TRAIN to use them whole, at proportionally higher memory."
     )
   }
 
@@ -562,6 +565,7 @@ main <- function() {
     skills,
     k = cfg$k,
     sector_boost = cfg$sector_boost,
+    max_train = cfg$max_train,
     rescue_no_match = cfg$rescue,
     rescue_k = cfg$rescue_k,
     rescue_max_train = cfg$rescue_max_train,
