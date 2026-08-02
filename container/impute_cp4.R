@@ -131,6 +131,13 @@ cfg <- list(
   rescue_k = getenv_int("IMPUTE_RESCUE_K", 10L),
   rescue_max_train = getenv_int("IMPUTE_RESCUE_MAX_TRAIN", 400000L),
   dry_run = getenv_flag("IMPUTE_DRY_RUN", FALSE),
+  # The compute takes hours, so its result is cached before the write is
+  # attempted; IMPUTE_RESUME=1 writes that cache without recomputing.
+  cache_file = getenv_default(
+    "IMPUTE_CACHE_FILE",
+    file.path(getenv_default("IMPUTE_LOCK_DIR", tempdir()), "cp4_output.rds")
+  ),
+  resume = getenv_flag("IMPUTE_RESUME", FALSE),
   # Per-ESCO-group training cap. The subsample is a deterministic stride, so
   # exceeding it costs training data but not reproducibility.
   max_train = getenv_int("IMPUTE_MAX_TRAIN", 50000L),
@@ -355,22 +362,38 @@ table_exists <- function(con, schema, table) {
   DBI::dbExistsTable(con, target_id(schema, table))
 }
 
-add_constraints <- function(con, schema, table) {
+# Index and constraint names are global to the schema, and ALTER TABLE ...
+# RENAME does not rename them. Naming them after the staging table therefore
+# leaves "<table>_new_pkey" attached to the live table, and the next build
+# collides with it. Build with a run-unique suffix instead, then rename to the
+# canonical names inside the swap transaction, once the old table -- and with
+# it the old names -- has been dropped.
+build_names <- function(table, suffix) {
+  list(
+    pkey = paste0(table, "_pkey_", suffix),
+    ym = paste0("idx_", table, "_ym_", suffix),
+    pkey_final = paste0(table, "_pkey"),
+    ym_final = paste0("idx_", table, "_ym")
+  )
+}
+
+add_constraints <- function(con, schema, table, nm) {
   s <- qi(con, schema)
   t <- qi(con, table)
   DBI::dbExecute(
     con,
     sprintf(
-      "ALTER TABLE %s.%s ADD PRIMARY KEY (general_id)",
+      "ALTER TABLE %s.%s ADD CONSTRAINT %s PRIMARY KEY (general_id)",
       s,
-      t
+      t,
+      qi(con, nm$pkey)
     )
   )
   DBI::dbExecute(
     con,
     sprintf(
       "CREATE INDEX %s ON %s.%s (year_grab_date, month_grab_date)",
-      qi(con, paste0("idx_", table, "_ym")),
+      qi(con, nm$ym),
       s,
       t
     )
@@ -382,9 +405,10 @@ write_full <- function(con, out, schema, table) {
   if (table_exists(con, schema, staging_tbl)) {
     DBI::dbRemoveTable(con, target_id(schema, staging_tbl))
   }
+  nm <- build_names(table, Sys.getpid())
   .info("writing ", nrow(out), " rows to ", schema, ".", staging_tbl)
   DBI::dbWriteTable(con, target_id(schema, staging_tbl), out, overwrite = TRUE)
-  add_constraints(con, schema, staging_tbl)
+  add_constraints(con, schema, staging_tbl, nm)
 
   s <- qi(con, schema)
   DBI::dbBegin(con)
@@ -400,6 +424,26 @@ write_full <- function(con, out, schema, table) {
           s,
           qi(con, staging_tbl),
           qi(con, table)
+        )
+      )
+      # The old table is gone, so its constraint and index names are free.
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "ALTER TABLE %s.%s RENAME CONSTRAINT %s TO %s",
+          s,
+          qi(con, table),
+          qi(con, nm$pkey),
+          qi(con, nm$pkey_final)
+        )
+      )
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "ALTER INDEX %s.%s RENAME TO %s",
+          s,
+          qi(con, nm$ym),
+          qi(con, nm$ym_final)
         )
       )
       DBI::dbCommit(con)
@@ -476,11 +520,36 @@ main <- function() {
     cfg$dry_run
   )
 
+  # -- resume: write a cached compute without redoing it --
+  if (cfg$resume) {
+    if (!nzchar(cfg$cache_file) || !file.exists(cfg$cache_file)) {
+      .die(1L, "IMPUTE_RESUME set but no cache at ", cfg$cache_file)
+    }
+    cached <- readRDS(cfg$cache_file)
+    .info(
+      "resuming from ",
+      cfg$cache_file,
+      ": ",
+      nrow(cached$out),
+      " rows, mode=",
+      cached$mode
+    )
+    if (cfg$dry_run) {
+      .info("IMPUTE_DRY_RUN set — nothing written")
+      return(invisible(0L))
+    }
+    write_out(p, cached$out, list(mode = cached$mode, months = cached$months))
+    return(invisible(0L))
+  }
+
   con <- pg_connect(p)
   if (is.null(con)) {
     .die(1L, "could not connect to Postgres after 3 attempts")
   }
-  on.exit(try(DBI::dbDisconnect(con), silent = TRUE), add = TRUE)
+  on.exit(
+    try(if (!is.null(con)) DBI::dbDisconnect(con), silent = TRUE),
+    add = TRUE
+  )
 
   # -- scope: the last N months present in the source --
   rng <- setDT(DBI::dbGetQuery(
@@ -533,6 +602,15 @@ main <- function() {
   .info("reading skills ...")
   skills <- read_skills(con, ym_from, ym_to, postings$general_id)
   .info("skills: ", nrow(skills), " assignments")
+
+  # Everything needed is in memory now, and the imputation takes hours. Holding
+  # the connection open across it does not survive contact with a managed
+  # Postgres: Azure dropped an idle 5.5-hour session and the write failed with
+  # "SSL SYSCALL error: Operation timed out" AFTER the whole imputation had
+  # succeeded. Close here and reconnect when there is something to write.
+  DBI::dbDisconnect(con)
+  con <- NULL
+  .info("disconnected for the compute phase")
 
   # -- training-cap visibility --
   # predict_cp4_knn() subsamples groups above max_train by a deterministic
@@ -596,11 +674,31 @@ main <- function() {
     paste(sprintf("flag %s=%d", flag$cp4_imputed, flag$N), collapse = ", ")
   )
 
+  # Persist before attempting the write. The compute costs hours; a transient
+  # database failure must not throw it away. IMPUTE_RESUME=1 reloads this and
+  # skips straight to the write.
+  if (nzchar(cfg$cache_file)) {
+    saveRDS(list(out = out, mode = d$mode, months = d$months), cfg$cache_file)
+    .info("cached output to ", cfg$cache_file)
+  }
+
   if (cfg$dry_run) {
     .info("IMPUTE_DRY_RUN set — nothing written")
     return(invisible(0L))
   }
 
+  write_out(p, out, d)
+  invisible(0L)
+}
+
+# 12. Write phase, on its own connection -----
+# Separated so it can run either after a fresh compute or from the cache.
+write_out <- function(p, out, d) {
+  con <- pg_connect(p)
+  if (is.null(con)) {
+    .die(1L, "could not reconnect to Postgres to write")
+  }
+  on.exit(try(DBI::dbDisconnect(con), silent = TRUE), add = TRUE)
   if (d$mode == "full") {
     write_full(con, out, cfg$schema, cfg$table)
   } else {
