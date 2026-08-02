@@ -12,3 +12,5 @@
 ^\.github$
 ^README\.md$
 ^sql$
+^container$
+^\.dockerignore$

@@ -1,0 +1,34 @@
+# Build context for container/Dockerfile is this directory, so this is the
+# .dockerignore docker actually reads. Its first job is keeping secrets out of
+# the image: container/.Renviron holds live Postgres credentials.
+
+.Renviron
+.Renviron.*
+container/.Renviron
+**/.Renviron
+*.env
+!*.env.example
+.env
+.env.*
+
+.git
+.github
+.Rproj.user
+*.Rproj
+.Rhistory
+.RData
+renv
+renv.lock
+docs
+pkgdown
+reference
+CLAUDE.md
+.claude
+sql
+
+*.duckdb
+*.duckdb.wal
+*.fst
+*.rds
+*.log
+*.tar.gz
