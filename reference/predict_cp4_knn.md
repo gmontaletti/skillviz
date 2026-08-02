@@ -94,19 +94,52 @@ windowed one when comparing against pipeline output.
 
 Both figures above come from splits that draw train and test from the
 same window at random, so near-duplicate postings can land on both
-sides. A walk-forward check
+sides.
+
+The pipeline calls this function **once on the whole 24-month window**
+(`skillviz_workflow/_targets.R`), so an unlabeled posting draws
+neighbours from every month, including later ones: production is
+*contemporaneous*, not walk-forward. A walk-forward check
 (`skillviz_workflow/run_cp4_temporal_validation.R`) trains on every
-labeled month before each of the last 6 calendar months of the window
-and tests on that month alone, matching how the pipeline actually scores
-postings newer than anything it was trained on. CP4 accuracy at
-k=7/sector_boost=5.0 drops to 75.9% (-4.4 pp), and every grid cell loses
-3.3-4.4 pp; the best walk-forward cell is k=20/sector_boost=7.0 at
-76.1%, only 0.2 pp above the random-split winner and within 1 SD
-(0.6-0.7 pp across the 6 test months) of it. Accuracy is stable across
-the 6 held-out months (75.0-76.6%, no downward drift), so the gap is a
-property of same-window random splits, not of accuracy degrading over
-time in production – report ~76%, not 80.29%, as the expected production
-CP4 accuracy.
+labeled month before each of the last 6 months and scores that month
+alone; CP4 accuracy falls to 75.9% and every grid cell loses 3.3-4.4 pp,
+stable across the 6 months (75.0-76.6%, no drift). That is a lower bound
+for a *future-deployment* scenario, not the regime the pipeline runs in.
+
+Accuracy quoted over all test rows conflates three populations.
+Decomposed on a contemporaneous stratified holdout at
+k=7/sector_boost=5.0 (`skillviz_workflow/run_cp4_kernel_sweep.R`): the
+k-NN vote decides 82.6% of production rows and is 86.1% accurate on
+them, against 62.0% for the modal fallback on the same rows, so the vote
+is worth +24.1 pp. The frequency fallback covers 4.4% at 69.9%, and
+13.1% of unlabeled rows get `no_match` because they carry no
+`idesco_level_4` at all – only 5.6% of *labeled* rows do, so a labeled
+holdout cannot reproduce production coverage. Weighted together that
+gives **~74% expected production CP4 accuracy**, and that assumes k-NN
+accuracy transfers unchanged from labeled to unlabeled rows, which the
+covariate shift below makes optimistic.
+
+Unlabeled postings are systematically longer than labeled ones: 12.7
+skills against 8.2 on k-NN-eligible rows, a 1.55x gap stable across all
+25 months and 78% within-source. Six alternative similarity kernels were
+tested for length robustness (`run_cp4_kernel_sweep.R`, contemporaneous
+holdout, 3 splits), parameterised as Tversky
+`I / (I + alpha*(A-I) + beta*(B-I))`: **Jaccard `(1,1)` wins at k=7 and
+nothing displaces it.** The best challenger `(1,0.5)` is -0.013 pp, 19x
+smaller than the 0.244 pp swing produced by flipping an arbitrary
+tie-break; Dice `(0.5,0.5)`, which is rank-equivalent to Jaccard and
+therefore selects identical neighbours, still moves -0.33 pp through
+vote weights alone, so anything under ~0.3 pp here is noise. The most
+length-robust kernel, containment `I/|B|` `(0,1)`, loses **18.1 pp**:
+Jaccard's union denominator is load-bearing, because `I/|B|` rewards
+short neighbours and lets a 2-skill posting contained in a 28-skill
+query score 1.0 while carrying almost no information. Do not re-test
+this axis.
+
+The length effect is real but is not a kernel problem. Long queries are
+twin-poor: top-1 similarity 0.45 with 0.2% exact twins at 21+ skills,
+against 0.76 and 48% at 1-4 skills. No kernel invents a neighbour that
+does not exist.
 
 An unknown `idsector` arrives from itaposts as the empty string, never
 as NA, so unknown-sector announcements boost each other. Normalising the
