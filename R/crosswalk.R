@@ -897,6 +897,30 @@ classify_esco_to_cpi <- function(
 #' against 0.76 and 48% at 1-4 skills. No kernel invents a neighbour that does
 #' not exist.
 #'
+#' The occupation hierarchy was also tested and closed
+#' (`skillviz_workflow/run_cp3_vote.R`). **ESCO level 3 is a worse restrictor
+#' than level 4, not a better one**: weighted by row volume over 761,521
+#' doubly-labelled postings, ESCO4 -> CP3 has 37.4 mean candidates and 68.4%
+#' modal-share accuracy, against 52.3 and 59.8% for ESCO3 -> CP3. Coarsening the
+#' *target* gains 5.7 pp; coarsening the *predictor* loses 8.6 pp, because ESCO
+#' L3 pools unit groups that map to different CP3 codes. ESCO L3 also cannot
+#' improve coverage: postings without an `idesco_level_4` carry
+#' `idesco_level_5 = "Unclassifiable"`, so no ESCO code exists at any level
+#' (and CP-unlabelled rows carry `cp2021_id_level_5 = ""`).
+#'
+#' Predicting CP3 by pooling the k-NN vote across sibling CP4 codes, rather than
+#' truncating the CP4 winner as `build_annunci_cp4()` does, is likewise **not
+#' worth it**: +0.063 pp CP3 on k-NN rows (88.54% -> 88.60% at k=7), changing
+#' only 0.31% of predictions, and when the two rules disagree pooling is right
+#' 60% of the time -- barely above chance, and far under this harness's 0.244 pp
+#' tie-break noise floor. The predicted mechanism is refuted: the gain is flat
+#' across ESCO-group ambiguity (0.00 pp at 2 candidates, +0.05 pp at 21+)
+#' instead of growing with it. Truncating the CP4 argmax is very nearly optimal
+#' for CP3. A second stage picking the best CP4 sibling inside the winning CP3
+#' also loses (86.011% vs 86.018%), as its break-even arithmetic predicted:
+#' it needs 93.5-97.8% conditional accuracy while modal-CP4-within-CP3 is 68.5%
+#' over 4.6 candidates. Do not re-test this axis.
+#'
 #' `rescue_no_match = TRUE` addresses a different population: the 13.1% of
 #' unlabeled rows that carry no `idesco_level_4`, so there is no candidate set
 #' to restrict to. 94.4% of them do have skills and all have an `idsector`.
