@@ -322,3 +322,148 @@ test_that("predict_cp4_knn handles ESCO not in training", {
   expect_equal(nrow(no_match), 2L)
   expect_true(all(is.na(no_match$cp2021_id_level_4)))
 })
+
+# 3b. predict_cp4_knn rescue_no_match -----
+
+# Fixture: two ESCO groups that behave normally, plus three unlabeled rows with
+# no idesco_level_4 -- two carrying skills (rescuable) and one with none.
+.rescue_fixture <- function() {
+  postings <- data.table::data.table(
+    general_id = as.character(1:12),
+    idesco_level_4 = c(rep(c(1000L, 2000L), each = 4), rep(NA_integer_, 4)),
+    cp2021_id_level_4 = c(
+      "1.1.1.1",
+      "1.1.1.2",
+      NA,
+      NA,
+      "2.2.2.1",
+      "2.2.2.2",
+      NA,
+      NA,
+      "1.1.1.1",
+      NA,
+      NA,
+      NA
+    ),
+    idsector = c(rep("C", 4), rep("F", 4), "C", "C", "F", "F")
+  )
+  skills <- data.table::data.table(
+    general_id = as.character(c(
+      1,
+      1,
+      2,
+      2,
+      3,
+      3,
+      4,
+      4,
+      5,
+      5,
+      6,
+      6,
+      7,
+      7,
+      8,
+      8,
+      9,
+      9,
+      10,
+      10,
+      11,
+      11
+    )),
+    escoskill_level_3 = c(
+      "s1",
+      "s2",
+      "s2",
+      "s3",
+      "s1",
+      "s2",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "s5",
+      "s6",
+      "s4",
+      "s5",
+      "s5",
+      "s6",
+      "s1",
+      "s2",
+      "s1",
+      "s2",
+      "s4",
+      "s5"
+    )
+  )
+  list(postings = postings, skills = skills)
+}
+
+test_that("rescue_no_match = FALSE is bit-identical to the previous behaviour", {
+  f <- .rescue_fixture()
+  a <- predict_cp4_knn(f$postings, f$skills, k = 3L, verbose = FALSE)
+  b <- predict_cp4_knn(
+    f$postings,
+    f$skills,
+    k = 3L,
+    rescue_no_match = FALSE,
+    verbose = FALSE
+  )
+  expect_identical(a, b)
+  expect_false("knn_global" %in% a$method)
+})
+
+test_that("rescue_no_match = TRUE classifies no-ESCO rows that have skills", {
+  f <- .rescue_fixture()
+  base <- predict_cp4_knn(f$postings, f$skills, k = 3L, verbose = FALSE)
+  res <- predict_cp4_knn(
+    f$postings,
+    f$skills,
+    k = 3L,
+    rescue_no_match = TRUE,
+    rescue_k = 3L,
+    verbose = FALSE
+  )
+
+  # Same rows in, same rows out -- the rescue relabels, it does not add or drop.
+  expect_setequal(res$general_id, base$general_id)
+
+  rescued <- res[method == "knn_global"]
+  expect_true(nrow(rescued) > 0L)
+  expect_true(all(!is.na(rescued$cp2021_id_level_4)))
+  expect_true(all(rescued$confidence > 0 & rescued$confidence <= 1))
+
+  # id 12 has no skills at all, so it can never be rescued.
+  expect_true("12" %in% res[method == "no_match", general_id])
+
+  # Rows the ESCO-restricted path already handled must be untouched.
+  keep <- base[method != "no_match"]
+  expect_identical(
+    res[general_id %in% keep$general_id][order(general_id)],
+    keep[order(general_id)]
+  )
+})
+
+test_that("rescue_no_match respects rescue_max_train and stays deterministic", {
+  f <- .rescue_fixture()
+  a <- predict_cp4_knn(
+    f$postings,
+    f$skills,
+    k = 3L,
+    rescue_no_match = TRUE,
+    rescue_k = 3L,
+    rescue_max_train = 2L,
+    verbose = FALSE
+  )
+  b <- predict_cp4_knn(
+    f$postings,
+    f$skills,
+    k = 3L,
+    rescue_no_match = TRUE,
+    rescue_k = 3L,
+    rescue_max_train = 2L,
+    verbose = FALSE
+  )
+  expect_identical(a, b)
+})

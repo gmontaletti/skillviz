@@ -4,7 +4,16 @@
 \alias{predict_cp4_knn}
 \title{Predict CP2021 level-4 codes via sector-boosted Jaccard k-NN}
 \usage{
-predict_cp4_knn(postings, skills, k = 7L, sector_boost = 3, verbose = TRUE)
+predict_cp4_knn(
+  postings,
+  skills,
+  k = 7L,
+  sector_boost = 3,
+  rescue_no_match = FALSE,
+  rescue_k = 10L,
+  rescue_max_train = 200000L,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{postings}{A data.table with columns: \code{general_id} (character),
@@ -22,6 +31,22 @@ count as same-sector. That is deliberate, see Details.}
 \item{sector_boost}{Numeric multiplier for same-sector neighbors in the
 weighted vote. Set to 1.0 to disable sector boosting (default 3.0).}
 
+\item{rescue_no_match}{Logical: when TRUE, announcements that would be
+\code{no_match} for want of an \code{idesco_level_4} but that do carry skills are
+classified by an unrestricted k-NN over the whole labeled pool, and
+returned with \code{method = "knn_global"}. Defaults to FALSE, which reproduces
+the previous behaviour exactly. See Details for measured accuracy: these
+predictions are markedly less accurate than the ESCO-restricted ones, so
+\code{confidence} should be used to filter them.}
+
+\item{rescue_k}{Integer number of neighbors for the rescue pass (default
+10). Only used when \code{rescue_no_match = TRUE}.}
+
+\item{rescue_max_train}{Integer cap on the labeled pool used by the rescue
+pass (default 200000). The pool is subsampled by a deterministic stride
+over \code{general_id}, so results are reproducible and the RNG is untouched.
+Raising it improves accuracy at roughly linear cost in time.}
+
 \item{verbose}{Logical: print progress messages (default TRUE).}
 }
 \value{
@@ -31,7 +56,7 @@ A data.table with columns:
 \item{cp2021_id_level_4}{Predicted CP2021 level-4 code.}
 \item{confidence}{Weighted vote share of the winning class (0--1).}
 \item{method}{One of \code{"knn"}, \code{"frequency"}, \code{"single_candidate"},
-\code{"no_match"}.}
+\code{"no_match"}, or \code{"knn_global"} when \code{rescue_no_match = TRUE}.}
 }
 }
 \description{
@@ -112,6 +137,31 @@ The length effect is real but is not a kernel problem. Long queries are
 twin-poor: top-1 similarity 0.45 with 0.2\% exact twins at 21+ skills,
 against 0.76 and 48\% at 1-4 skills. No kernel invents a neighbour that does
 not exist.
+
+\code{rescue_no_match = TRUE} addresses a different population: the 13.1\% of
+unlabeled rows that carry no \code{idesco_level_4}, so there is no candidate set
+to restrict to. 94.4\% of them do have skills and all have an \code{idsector}.
+Validation used the population analogue rather than a simulation -- 45,029
+\emph{labeled} rows also lack an ESCO code, so they carry ground truth in the
+target's shape (\code{skillviz_workflow/run_cp4_no_match_rescue.R}). Unrestricted
+k-NN at \code{rescue_k = 10} with \code{sector_boost = 5} scores 68.8\% CP4 / 74.0\% CP3
+there, against 36.6\% for CP4-centroid cosine, 19.4\% for sector-modal and
+3.8\% for global-modal; reweighted to the target's length distribution, which
+is longer than the analogue's, the expected figure is \strong{73.8\% CP4 / 77.8\%
+CP3}. That is well below the 86.1\% of the ESCO-restricted path, which is
+why the argument defaults to FALSE and why \code{confidence} matters here.
+
+Confidence is well calibrated on this population and is the intended filter:
+the top 10\% of rescued rows by confidence is 99.1\% accurate, the top 30\%
+96.8\%, the top 50\% 91.1\%. Accuracy also rises steeply with posting length,
+from 44.3\% at 1-4 skills to 91.9\% at 21+. The high-confidence slice is not
+an artefact of near-duplicate retrieval: exact skill-set twins are 61.3\% of
+this population but score \emph{worse} than non-twins (66.4\% vs 71.8\%), because a
+short skill set has many twins without determining the occupation.
+
+The rescue pass reads accuracy from a pool capped at \code{rescue_max_train}.
+Accuracy was still climbing with pool size when measured (+2.0 pp from 200k
+to 400k), so the default 200000 trades some accuracy for runtime.
 
 An unknown \code{idsector} arrives from itaposts as the empty string, never as
 NA, so unknown-sector announcements boost each other. Normalising the empty

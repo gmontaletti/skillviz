@@ -642,6 +642,145 @@ classify_esco_to_cpi <- function(
 }
 
 
+# 4b. .global_knn_vote -----
+
+# Unrestricted Jaccard k-NN for announcements that carry no idesco_level_4 and
+# therefore have no candidate set to restrict to. Unlike .jaccard_knn_vote()
+# this cannot materialise a dense test x train block: the train pool is the
+# whole labeled set (750k+ rows), not one ESCO group. It keeps the
+# intersection sparse and selects the top k from each test row's non-zero
+# candidates only -- a zero-similarity neighbour can never enter the vote --
+# using partial selection rather than a full order().
+#
+# The train pool is capped by systematic stride over general_id order. That is
+# deterministic and unrelated to the CP4 label, so it subsamples without bias
+# and without touching the RNG (predict_cp4_knn() must stay reproducible).
+.global_knn_vote <- function(
+  test_gids,
+  test_skills,
+  train_skills,
+  test_sectors,
+  train_sectors,
+  k,
+  sector_boost,
+  max_train,
+  nnz_budget = 2e7
+) {
+  skill_levels <- sort(unique(c(
+    test_skills$escoskill_level_3,
+    train_skills$escoskill_level_3
+  )))
+  train_gids <- sort(unique(train_skills$general_id))
+  if (length(train_gids) == 0L || length(skill_levels) == 0L) {
+    return(NULL)
+  }
+
+  if (length(train_gids) > max_train) {
+    stride <- seq(1L, length(train_gids), length.out = max_train)
+    train_gids <- train_gids[unique(as.integer(stride))]
+    train_skills <- train_skills[general_id %chin% train_gids]
+  }
+  # Align sectors to train_gids ALWAYS, not only when the cap fires: the caller
+  # builds this named vector in its own order, which is not train_gids order.
+  if (!is.null(train_sectors)) {
+    train_sectors <- train_sectors[match(train_gids, names(train_sectors))]
+  }
+
+  .sparse <- function(gids, sk_dt) {
+    sk <- unique(sk_dt[
+      general_id %chin% gids,
+      .(general_id, escoskill_level_3)
+    ])
+    if (nrow(sk) == 0L) {
+      return(NULL)
+    }
+    Matrix::sparseMatrix(
+      i = match(sk$general_id, gids),
+      j = match(sk$escoskill_level_3, skill_levels),
+      x = 1,
+      dims = c(length(gids), length(skill_levels))
+    )
+  }
+
+  train_mat <- .sparse(train_gids, train_skills)
+  test_mat <- .sparse(test_gids, test_skills)
+  if (is.null(train_mat) || is.null(test_mat)) {
+    return(NULL)
+  }
+
+  rs_train <- Matrix::rowSums(train_mat)
+  rs_test <- Matrix::rowSums(test_mat)
+  lu <- unique(train_skills[, .(general_id, cp2021_id_level_4)])
+  tcp4 <- lu[match(train_gids, general_id), cp2021_id_level_4]
+  tsect <- if (is.null(train_sectors)) {
+    rep(NA_character_, length(train_gids))
+  } else {
+    as.character(train_sectors)
+  }
+
+  batch <- max(1L, as.integer(nnz_budget / length(train_gids)))
+  out <- vector("list", length(test_gids))
+  oi <- 0L
+
+  for (b0 in seq(1L, length(test_gids), by = batch)) {
+    b1 <- min(b0 + batch - 1L, length(test_gids))
+    m <- Matrix::tcrossprod(train_mat, test_mat[b0:b1, , drop = FALSE])
+    for (j in seq_len(b1 - b0 + 1L)) {
+      gi <- b0 + j - 1L
+      lo <- m@p[j] + 1L
+      hi <- m@p[j + 1L]
+      if (hi < lo) {
+        next
+      }
+      idx <- m@i[lo:hi] + 1L
+      inter <- m@x[lo:hi]
+      uni <- rs_test[gi] + rs_train[idx] - inter
+      sims <- ifelse(uni > 0, inter / uni, 0)
+      keep <- sims > 0 & !is.na(tcp4[idx])
+      if (!any(keep)) {
+        next
+      }
+      sims <- sims[keep]
+      idx <- idx[keep]
+      # Partial selection: a full order() over every candidate would dominate
+      # the runtime at this pool size.
+      kk <- min(k, length(sims))
+      if (length(sims) > kk) {
+        cut <- sort(sims, partial = length(sims) - kk + 1L)[
+          length(sims) - kk + 1L
+        ]
+        sel <- which(sims >= cut)
+        if (length(sel) > kk) {
+          sel <- sel[order(sims[sel], idx[sel], decreasing = c(TRUE, FALSE))][
+            seq_len(kk)
+          ]
+        }
+      } else {
+        sel <- seq_along(sims)
+      }
+
+      w <- sims[sel]
+      if (sector_boost != 1 && !is.na(test_sectors[gi])) {
+        same <- !is.na(tsect[idx[sel]]) & tsect[idx[sel]] == test_sectors[gi]
+        w[same] <- w[same] * sector_boost
+      }
+      va <- data.table::data.table(cp4 = tcp4[idx[sel]], w = w)
+      va <- va[, .(wt = sum(w)), by = cp4]
+      winner <- va[which.max(wt)]
+      oi <- oi + 1L
+      out[[oi]] <- data.table::data.table(
+        general_id = test_gids[gi],
+        cp2021_id_level_4 = winner$cp4,
+        confidence = winner$wt / sum(w),
+        method = "knn_global"
+      )
+    }
+  }
+
+  if (oi == 0L) NULL else data.table::rbindlist(out[seq_len(oi)])
+}
+
+
 # 5. predict_cp4_knn -----
 
 #' Predict CP2021 level-4 codes via sector-boosted Jaccard k-NN
@@ -663,6 +802,19 @@ classify_esco_to_cpi <- function(
 #' @param k Integer number of nearest neighbors (default 7).
 #' @param sector_boost Numeric multiplier for same-sector neighbors in the
 #'   weighted vote. Set to 1.0 to disable sector boosting (default 3.0).
+#' @param rescue_no_match Logical: when TRUE, announcements that would be
+#'   `no_match` for want of an `idesco_level_4` but that do carry skills are
+#'   classified by an unrestricted k-NN over the whole labeled pool, and
+#'   returned with `method = "knn_global"`. Defaults to FALSE, which reproduces
+#'   the previous behaviour exactly. See Details for measured accuracy: these
+#'   predictions are markedly less accurate than the ESCO-restricted ones, so
+#'   `confidence` should be used to filter them.
+#' @param rescue_k Integer number of neighbors for the rescue pass (default
+#'   10). Only used when `rescue_no_match = TRUE`.
+#' @param rescue_max_train Integer cap on the labeled pool used by the rescue
+#'   pass (default 200000). The pool is subsampled by a deterministic stride
+#'   over `general_id`, so results are reproducible and the RNG is untouched.
+#'   Raising it improves accuracy at roughly linear cost in time.
 #' @param verbose Logical: print progress messages (default TRUE).
 #'
 #' @return A data.table with columns:
@@ -671,7 +823,7 @@ classify_esco_to_cpi <- function(
 #'     \item{cp2021_id_level_4}{Predicted CP2021 level-4 code.}
 #'     \item{confidence}{Weighted vote share of the winning class (0--1).}
 #'     \item{method}{One of `"knn"`, `"frequency"`, `"single_candidate"`,
-#'       `"no_match"`.}
+#'       `"no_match"`, or `"knn_global"` when `rescue_no_match = TRUE`.}
 #'   }
 #'
 #' @details
@@ -745,6 +897,31 @@ classify_esco_to_cpi <- function(
 #' against 0.76 and 48% at 1-4 skills. No kernel invents a neighbour that does
 #' not exist.
 #'
+#' `rescue_no_match = TRUE` addresses a different population: the 13.1% of
+#' unlabeled rows that carry no `idesco_level_4`, so there is no candidate set
+#' to restrict to. 94.4% of them do have skills and all have an `idsector`.
+#' Validation used the population analogue rather than a simulation -- 45,029
+#' *labeled* rows also lack an ESCO code, so they carry ground truth in the
+#' target's shape (`skillviz_workflow/run_cp4_no_match_rescue.R`). Unrestricted
+#' k-NN at `rescue_k = 10` with `sector_boost = 5` scores 68.8% CP4 / 74.0% CP3
+#' there, against 36.6% for CP4-centroid cosine, 19.4% for sector-modal and
+#' 3.8% for global-modal; reweighted to the target's length distribution, which
+#' is longer than the analogue's, the expected figure is **73.8% CP4 / 77.8%
+#' CP3**. That is well below the 86.1% of the ESCO-restricted path, which is
+#' why the argument defaults to FALSE and why `confidence` matters here.
+#'
+#' Confidence is well calibrated on this population and is the intended filter:
+#' the top 10% of rescued rows by confidence is 99.1% accurate, the top 30%
+#' 96.8%, the top 50% 91.1%. Accuracy also rises steeply with posting length,
+#' from 44.3% at 1-4 skills to 91.9% at 21+. The high-confidence slice is not
+#' an artefact of near-duplicate retrieval: exact skill-set twins are 61.3% of
+#' this population but score *worse* than non-twins (66.4% vs 71.8%), because a
+#' short skill set has many twins without determining the occupation.
+#'
+#' The rescue pass reads accuracy from a pool capped at `rescue_max_train`.
+#' Accuracy was still climbing with pool size when measured (+2.0 pp from 200k
+#' to 400k), so the default 200000 trades some accuracy for runtime.
+#'
 #' An unknown `idsector` arrives from itaposts as the empty string, never as
 #' NA, so unknown-sector announcements boost each other. Normalising the empty
 #' string to NA was measured and **reduces** accuracy: -1.51 pp on the 2.8% of
@@ -777,6 +954,9 @@ predict_cp4_knn <- function(
   skills,
   k = 7L,
   sector_boost = 3.0,
+  rescue_no_match = FALSE,
+  rescue_k = 10L,
+  rescue_max_train = 200000L,
   verbose = TRUE
 ) {
   # 5a. Input validation -----
@@ -853,8 +1033,53 @@ predict_cp4_knn <- function(
     general_id
   ]
 
-  results <- vector("list", length(processable) + 2L)
+  results <- vector("list", length(processable) + 3L)
   ri <- 0L
+
+  # Rows with no usable ESCO code. With rescue_no_match = TRUE those that carry
+  # skills are sent to an unrestricted k-NN over the whole labeled pool instead
+  # of being abandoned; the rest stay no_match.
+  rescued <- NULL
+  if (length(no_match_gids) > 0L && isTRUE(rescue_no_match)) {
+    rescue_skills <- skills_dt[general_id %chin% no_match_gids]
+    rescue_gids <- unique(rescue_skills$general_id)
+    if (length(rescue_gids) > 0L) {
+      if (verbose) {
+        message(sprintf(
+          "predict_cp4_knn: rescuing %d of %d no_match rows via global k-NN",
+          length(rescue_gids),
+          length(no_match_gids)
+        ))
+      }
+      if (has_sector) {
+        r_sect <- unlabeled[match(rescue_gids, general_id), idsector]
+        tr_gids_all <- unique(train_skills$general_id)
+        tr_sect_all <- stats::setNames(
+          labeled[match(tr_gids_all, general_id), idsector],
+          tr_gids_all
+        )
+      } else {
+        r_sect <- rep(NA_character_, length(rescue_gids))
+        tr_sect_all <- NULL
+      }
+      rescued <- .global_knn_vote(
+        test_gids = rescue_gids,
+        test_skills = rescue_skills,
+        train_skills = train_skills,
+        test_sectors = r_sect,
+        train_sectors = tr_sect_all,
+        k = rescue_k,
+        sector_boost = sector_boost,
+        max_train = rescue_max_train
+      )
+    }
+  }
+
+  if (!is.null(rescued)) {
+    ri <- ri + 1L
+    results[[ri]] <- rescued
+    no_match_gids <- setdiff(no_match_gids, rescued$general_id)
+  }
 
   if (length(no_match_gids) > 0L) {
     ri <- ri + 1L
