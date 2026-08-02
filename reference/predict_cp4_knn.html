@@ -56,6 +56,7 @@ sector boosting that gives higher weight to same-sector neighbors.</p>
 <span>  <span class="va">skills</span>,</span>
 <span>  k <span class="op">=</span> <span class="fl">7L</span>,</span>
 <span>  sector_boost <span class="op">=</span> <span class="fl">3</span>,</span>
+<span>  max_train <span class="op">=</span> <span class="fl">50000L</span>,</span>
 <span>  rescue_no_match <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  rescue_k <span class="op">=</span> <span class="fl">10L</span>,</span>
 <span>  rescue_max_train <span class="op">=</span> <span class="fl">200000L</span>,</span>
@@ -88,6 +89,15 @@ count as same-sector. That is deliberate, see Details.</p></dd>
 <dt id="arg-sector-boost">sector_boost<a class="anchor" aria-label="anchor" href="#arg-sector-boost"></a></dt>
 <dd><p>Numeric multiplier for same-sector neighbors in the
 weighted vote. Set to 1.0 to disable sector boosting (default 3.0).</p></dd>
+
+
+<dt id="arg-max-train">max_train<a class="anchor" aria-label="anchor" href="#arg-max-train"></a></dt>
+<dd><p>Integer cap on the labelled pool used per ESCO group
+(default 50000). Groups above it are subsampled by a deterministic stride
+over the existing row order, so results are reproducible and the RNG is
+untouched. The cap does fire on the current 24-month window — ESCO group
+5223 carries about 52,700 labelled rows — so raise it to use those groups
+whole, at the cost of a dense <code>test x train</code> block that grows with it.</p></dd>
 
 
 <dt id="arg-rescue-no-match">rescue_no_match<a class="anchor" aria-label="anchor" href="#arg-rescue-no-match"></a></dt>

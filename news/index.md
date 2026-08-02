@@ -2,6 +2,36 @@
 
 ## skillviz 0.2.0
 
+### Riproducibilità di `predict_cp4_knn()`
+
+- Il campionamento che limita la dimensione del pool di addestramento
+  per gruppo ESCO non usa più
+  [`sample.int()`](https://rdrr.io/r/base/sample.html) senza seme, ma
+  una selezione deterministica a passo costante sull’ordine già fissato
+  dal chiamante. Il limite **scatta in produzione**: il gruppo ESCO 5223
+  conta circa 52.700 annunci etichettati sulla finestra di 24 mesi,
+  quindi finora due esecuzioni sullo stesso input restituivano
+  previsioni diverse per quel gruppo. L’ordine non viene riordinato,
+  perché determina anche il criterio di spareggio fra similarità uguali:
+  riordinarlo cambierebbe le previsioni di tutti i gruppi, non solo di
+  quelli troncati.
+- Nuovo argomento `max_train` (default 50000, il valore finora cablato
+  nel codice) per usare interi i gruppi più grandi. Quando il limite
+  scatta viene emesso un avviso, prima l’evento era silenzioso.
+
+### Recupero degli annunci senza codice ESCO
+
+- Nuovo argomento `rescue_no_match` (default `FALSE`, che riproduce il
+  comportamento precedente). Con `TRUE` gli annunci privi di
+  `idesco_level_4` ma dotati di competenze vengono classificati da un
+  k-NN Jaccard non ristretto sull’intero pool etichettato e restituiti
+  con `method = "knn_global"`. Riguarda il 13,1% degli annunci non
+  etichettati, di cui il 94,4% possiede competenze; in precedenza
+  restavano `no_match` e venivano scartati a valle. Accuratezza attesa
+  circa 74% CP4 / 78% CP3, contro l’86% del percorso ristretto per ESCO,
+  quindi la `confidence` restituita è il filtro da usare. Argomenti
+  `rescue_k` e `rescue_max_train` per regolarne il costo.
+
 ### Lettura dei dati OJA da itaposts
 
 - Nuova dipendenza formale da `itaposts` (`Imports`, installato tramite
