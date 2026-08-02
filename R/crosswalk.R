@@ -514,7 +514,8 @@ classify_esco_to_cpi <- function(
   train_sectors,
   freq_cp4,
   k,
-  sector_boost
+  sector_boost,
+  max_train = 50000L
 ) {
   # 4a. Edge case: no skills -----
   if (
@@ -562,13 +563,35 @@ classify_esco_to_cpi <- function(
   }
 
   # 4c. Cap train size to avoid OOM on large ESCO groups -----
-  max_train <- 50000L
+  # The subsample is a deterministic stride over the existing train_gids order
+  # rather than sample.int(). That order is already fixed by the caller, so the
+  # stride is reproducible, and since general_id is unrelated to the CP4 label
+  # it subsamples without bias. The order is deliberately NOT re-sorted: it also
+  # breaks similarity ties downstream, so re-ordering would shift predictions
+  # for every group, not just the capped ones.
+  #
+  # This fires in production: ESCO group 5223 carries ~52.7k labelled rows on
+  # the 24-month window, so under the previous unseeded draw two runs on
+  # identical input returned different predictions for it.
   if (length(train_gids) > max_train) {
-    sample_idx <- sample.int(length(train_gids), max_train)
-    train_gids <- train_gids[sample_idx]
-    train_mat <- train_mat[sample_idx, , drop = FALSE]
+    warning(
+      "an ESCO group has ",
+      length(train_gids),
+      " labelled rows, above max_train = ",
+      max_train,
+      "; subsampling by a deterministic stride. Raise max_train to use the ",
+      "whole group.",
+      call. = FALSE
+    )
+    keep <- unique(as.integer(seq(
+      1L,
+      length(train_gids),
+      length.out = max_train
+    )))
+    train_gids <- train_gids[keep]
+    train_mat <- train_mat[keep, , drop = FALSE]
     if (!is.null(train_sectors)) {
-      train_sectors <- train_sectors[sample_idx]
+      train_sectors <- train_sectors[keep]
     }
   }
 
@@ -802,6 +825,12 @@ classify_esco_to_cpi <- function(
 #' @param k Integer number of nearest neighbors (default 7).
 #' @param sector_boost Numeric multiplier for same-sector neighbors in the
 #'   weighted vote. Set to 1.0 to disable sector boosting (default 3.0).
+#' @param max_train Integer cap on the labelled pool used per ESCO group
+#'   (default 50000). Groups above it are subsampled by a deterministic stride
+#'   over the existing row order, so results are reproducible and the RNG is
+#'   untouched. The cap does fire on the current 24-month window — ESCO group
+#'   5223 carries about 52,700 labelled rows — so raise it to use those groups
+#'   whole, at the cost of a dense `test x train` block that grows with it.
 #' @param rescue_no_match Logical: when TRUE, announcements that would be
 #'   `no_match` for want of an `idesco_level_4` but that do carry skills are
 #'   classified by an unrestricted k-NN over the whole labeled pool, and
@@ -978,6 +1007,7 @@ predict_cp4_knn <- function(
   skills,
   k = 7L,
   sector_boost = 3.0,
+  max_train = 50000L,
   rescue_no_match = FALSE,
   rescue_k = 10L,
   rescue_max_train = 200000L,
@@ -1171,7 +1201,8 @@ predict_cp4_knn <- function(
       train_sectors = trsect,
       freq_cp4 = freq_cp4,
       k = k,
-      sector_boost = sector_boost
+      sector_boost = sector_boost,
+      max_train = max_train
     )
 
     n_processed <- n_processed + 1L

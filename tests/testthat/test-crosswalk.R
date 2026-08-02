@@ -467,3 +467,52 @@ test_that("rescue_no_match respects rescue_max_train and stays deterministic", {
   )
   expect_identical(a, b)
 })
+
+# 3c. predict_cp4_knn max_train determinism -----
+
+test_that("max_train subsampling is deterministic and warns", {
+  set.seed(11)
+  n_tr <- 60L
+  postings <- data.table::data.table(
+    general_id = as.character(seq_len(n_tr + 6L)),
+    idesco_level_4 = 1000L,
+    cp2021_id_level_4 = c(
+      rep(c("1.1.1.1", "1.1.1.2"), length.out = n_tr),
+      rep(NA_character_, 6L)
+    ),
+    idsector = "C"
+  )
+  skills <- data.table::rbindlist(lapply(seq_len(n_tr + 6L), function(i) {
+    data.table::data.table(
+      general_id = as.character(i),
+      escoskill_level_3 = paste0("s", sample.int(6L, 3L))
+    )
+  }))
+
+  # Cap well below the group size so the stride path is exercised.
+  expect_warning(
+    a <- predict_cp4_knn(
+      postings, skills, k = 3L, max_train = 10L, verbose = FALSE
+    ),
+    "above max_train"
+  )
+  expect_warning(
+    b <- predict_cp4_knn(
+      postings, skills, k = 3L, max_train = 10L, verbose = FALSE
+    ),
+    "above max_train"
+  )
+  # Deterministic: two runs agree exactly, with no seed set between them.
+  expect_identical(a, b)
+})
+
+test_that("max_train default leaves small groups untouched and silent", {
+  f <- .rescue_fixture()
+  expect_no_warning(
+    a <- predict_cp4_knn(f$postings, f$skills, k = 3L, verbose = FALSE)
+  )
+  b <- predict_cp4_knn(
+    f$postings, f$skills, k = 3L, max_train = 50000L, verbose = FALSE
+  )
+  expect_identical(a, b)
+})

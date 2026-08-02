@@ -9,6 +9,7 @@ predict_cp4_knn(
   skills,
   k = 7L,
   sector_boost = 3,
+  max_train = 50000L,
   rescue_no_match = FALSE,
   rescue_k = 10L,
   rescue_max_train = 200000L,
@@ -30,6 +31,13 @@ count as same-sector. That is deliberate, see Details.}
 
 \item{sector_boost}{Numeric multiplier for same-sector neighbors in the
 weighted vote. Set to 1.0 to disable sector boosting (default 3.0).}
+
+\item{max_train}{Integer cap on the labelled pool used per ESCO group
+(default 50000). Groups above it are subsampled by a deterministic stride
+over the existing row order, so results are reproducible and the RNG is
+untouched. The cap does fire on the current 24-month window — ESCO group
+5223 carries about 52,700 labelled rows — so raise it to use those groups
+whole, at the cost of a dense \verb{test x train} block that grows with it.}
 
 \item{rescue_no_match}{Logical: when TRUE, announcements that would be
 \code{no_match} for want of an \code{idesco_level_4} but that do carry skills are

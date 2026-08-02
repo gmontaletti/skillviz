@@ -13,7 +13,8 @@
   train_sectors,
   freq_cp4,
   k,
-  sector_boost
+  sector_boost,
+  max_train = 50000L
 )
 }
 \arguments{
