@@ -68,6 +68,21 @@ splits, \code{skillviz_workflow/run_cp4_hyperparameter_sweep.R}): CP4 accuracy
 single-year figure is the easier setting; prefer the windowed one when
 comparing against pipeline output.
 
+Both figures above come from splits that draw train and test from the same
+window at random, so near-duplicate postings can land on both sides. A
+walk-forward check (\code{skillviz_workflow/run_cp4_temporal_validation.R})
+trains on every labeled month before each of the last 6 calendar months of
+the window and tests on that month alone, matching how the pipeline
+actually scores postings newer than anything it was trained on. CP4
+accuracy at k=7/sector_boost=5.0 drops to 75.9\% (-4.4 pp), and every grid
+cell loses 3.3-4.4 pp; the best walk-forward cell is k=20/sector_boost=7.0
+at 76.1\%, only 0.2 pp above the random-split winner and within 1 SD (0.6-0.7
+pp across the 6 test months) of it. Accuracy is stable across the 6 held-out
+months (75.0-76.6\%, no downward drift), so the gap is a property of
+same-window random splits, not of accuracy degrading over time in
+production -- report ~76\%, not 80.29\%, as the expected production CP4
+accuracy.
+
 An unknown \code{idsector} arrives from itaposts as the empty string, never as
 NA, so unknown-sector announcements boost each other. Normalising the empty
 string to NA was measured and \strong{reduces} accuracy: -1.51 pp on the 2.8\% of
