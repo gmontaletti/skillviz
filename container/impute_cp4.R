@@ -138,6 +138,10 @@ cfg <- list(
     file.path(getenv_default("IMPUTE_LOCK_DIR", tempdir()), "cp4_output.rds")
   ),
   resume = getenv_flag("IMPUTE_RESUME", FALSE),
+  # The mode decision compares MONTHS, so it cannot see that the model changed
+  # -- only that data did. Re-imputing after a routing or model change therefore
+  # needs an explicit force.
+  force_full = getenv_flag("IMPUTE_FORCE_FULL", FALSE),
   # Per-ESCO-group training cap. The subsample is a deterministic stride, so
   # exceeding it costs training data but not reproducibility.
   max_train = getenv_int("IMPUTE_MAX_TRAIN", 50000L),
@@ -742,6 +746,10 @@ main <- function() {
   }
 
   d <- decide_mode(months_src, months_done, exists_target, cfg$max_incremental)
+  if (cfg$force_full && d$mode != "full") {
+    .info("IMPUTE_FORCE_FULL set: overriding mode=", d$mode, " with a full rebuild")
+    d <- list(mode = "full", months = months_src)
+  }
   .info("mode=", d$mode, " months to impute: ", length(d$months))
   if (d$mode == "noop") {
     .info("target is up to date, nothing to do")
