@@ -18,8 +18,44 @@ store — this container talks to Postgres directly and is meant to run from cro
 | `cp2021_id_level_4` | text | the vendor's level-4 code where it exists, the imputed one otherwise |
 | `cp4_imputed` | smallint | `0` vendor-supplied, `1` algorithmic, `NULL` still unknown |
 
-`cp4_imputed` is `NULL` exactly when `cp2021_id_level_4` is `NULL` — postings with
-neither an ESCO code nor any skills, which nothing can classify.
+`cp4_imputed` is `NULL` exactly when `cp2021_id_level_4` is `NULL`.
+
+### One column, two precisions
+
+A single column carries every code, but imputed values come from two models and
+are not equally precise:
+
+| value shape | source | precision |
+|---|---|---|
+| `5.1.2.2` with `cp4_imputed = 0` | vendor | level 4 |
+| `5.1.2.2` with `cp4_imputed = 1` | k-NN, rows **with** an ESCO code | level 4 |
+| `5.1.2.0` with `cp4_imputed = 1` | xgboost, rows **without** an ESCO code | **level 3 only** |
+
+**A trailing `.0` means the code is only accurate to CP3.** The padding is
+unambiguous: of 510 real CP4 codes none ends in `.0`, and no padded CP3 collides
+with a real CP4, so `substring(code, 1, 5)` is always a valid CP3 and
+`code NOT LIKE '%.0'` selects the level-4-precise rows.
+
+### Which model handles which rows
+
+Each segment gets the model that wins on it, measured on 60,002 held-out rows at
+CP3 level:
+
+| rows | model | accuracy | incumbent |
+|---|---|---|---|
+| **with** `idesco_level_4` | k-NN (`predict_cp4_knn`) | **88.3%** | xgboost 85.0% |
+| **without** `idesco_level_4` | vtreat + xgboost | **77.5%** | k-NN 66.8% |
+
+Where an ESCO code exists, restricting candidates to the CP4 codes observed for
+that exact ESCO L4 beats impact-coded ESCO. Where none exists, that restriction
+is unavailable and the covariates the k-NN ignores — city, sector, source,
+contract, education, salary — win instead. The xgboost path is also the only one
+that can classify a posting with **no skills at all** (81.5% vs 69.7%).
+
+The model is refitted from scratch on each full run; there is no artefact to
+manage. CP3 codes with fewer than `IMPUTE_XGB_RARE_MIN` labelled examples are
+folded into an `other` bucket and those rows are left unimputed rather than
+guessed.
 
 A vendor code is never overwritten. The job asserts this before committing and
 aborts if it ever finds otherwise.
@@ -127,15 +163,20 @@ date, matching `fetch_annunci_24m_sql()` in the workflow. Without it
 
 ## Imputation quality
 
-Not all imputed rows are equally good, and the flag does not distinguish them:
+Imputed rows are not equally good, and `cp4_imputed` alone does not say which is
+which — the value's shape does:
 
-- ESCO-restricted path (~87% of imputed rows): **~86% CP4 accuracy**
-- ESCO-less rescue path, `IMPUTE_RESCUE=1` (~13%): **~74% CP4 / ~78% CP3**
+- **k-NN, ESCO rows**, level-4 precise: **~86% CP4 / ~88% CP3**
+- **xgboost, ESCO-less rows**, `.0`-padded, level-3 only: **~77.5% CP3**
 
-Set `IMPUTE_RESCUE=0` for the higher-quality subset only, at the cost of leaving
-~13% of postings unclassified. `predict_cp4_knn()` also returns a well-calibrated
-`confidence` that this table does not currently carry — the obvious follow-up if
-consumers need to filter the noisier rows.
+Filter on `cp2021_id_level_4 NOT LIKE '%.0'` for the level-4-precise subset. Rows
+whose predicted CP3 falls in the folded `other` bucket are left `NULL` rather
+than guessed, so coverage is slightly lower than the old rescue path but nothing
+is invented.
+
+`predict_cp4_knn()` also returns a well-calibrated `confidence`, and xgboost a
+class probability; neither is currently written. That is the obvious follow-up if
+consumers need to filter the noisier rows more finely.
 
 ## Image size
 

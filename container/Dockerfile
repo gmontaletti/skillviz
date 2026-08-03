@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       curl \
       git \
       libpq5 \
+      build-essential \
       locales \
       procps \
       tzdata \
@@ -37,8 +38,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # to load breaks the build here rather than at 03:00 in cron.
 RUN Rscript -e 'options(repos = c(CRAN = Sys.getenv("RENV_CONFIG_REPOS_OVERRIDE"))); \
                 options(Ncpus = parallel::detectCores()); \
-                install.packages(c("DBI","RPostgres","data.table","Matrix","igraph","collapse","fst","remotes")); \
-                invisible(lapply(c("DBI","RPostgres","data.table","Matrix","igraph","collapse","fst"), library, character.only = TRUE))' \
+                install.packages(c("DBI","RPostgres","data.table","Matrix","igraph","collapse","fst","remotes","vtreat","xgboost")); \
+                invisible(lapply(c("DBI","RPostgres","data.table","Matrix","igraph","collapse","fst","vtreat","xgboost"), library, character.only = TRUE))' \
     && rm -rf /tmp/Rtmp* /tmp/downloaded_packages /root/.cache
 
 # 4. skillviz -----------------------------------------------------------------

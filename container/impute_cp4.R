@@ -141,6 +141,16 @@ cfg <- list(
   # Per-ESCO-group training cap. The subsample is a deterministic stride, so
   # exceeding it costs training data but not reproducibility.
   max_train = getenv_int("IMPUTE_MAX_TRAIN", 50000L),
+  # ESCO-less rows go to a vtreat + xgboost model instead of the k-NN rescue.
+  # Measured on 60,002 held-out rows: the k-NN wins where an ESCO code exists
+  # (88.3% vs 85.0% CP3, because its exact candidate-set restriction beats
+  # impact-coded ESCO), and loses badly where one does not (66.8% vs 77.5%).
+  # So each segment gets the model that wins on it.
+  xgb = getenv_flag("IMPUTE_XGB", TRUE),
+  xgb_rare_min = getenv_int("IMPUTE_XGB_RARE_MIN", 30L),
+  xgb_rounds = getenv_int("IMPUTE_XGB_ROUNDS", 400L),
+  xgb_period_a_end = getenv_int("IMPUTE_XGB_PERIOD_A_END", 202412L),
+  seed = getenv_int("IMPUTE_SEED", 42L),
   lock_dir = getenv_default("IMPUTE_LOCK_DIR", tempdir())
 )
 
@@ -240,7 +250,11 @@ WITH d AS (
          a.month_grab_date,
          a.cp2021_id_level_5,
          a.idesco_level_5,
-         a.idsector
+         a.idsector,
+         a.idcity, a.idprovince, a.idmacro_sector, a.idcategory_sector,
+         a.idcontract, a.ideducational_level, a.idexperience,
+         a.idworking_hours, a.idsalary, a.salaryvalue,
+         a.source, a.source_relevance
   FROM public.lightcast_annunci_e12 a
   WHERE a.year_grab_date * 100 + a.month_grab_date BETWEEN $1 AND $2
   ORDER BY a.general_id,
@@ -250,7 +264,12 @@ SELECT d.general_id,
        d.year_grab_date,
        d.month_grab_date,
        d.idsector,
+       d.idcity, d.idprovince, d.idmacro_sector, d.idcategory_sector,
+       d.idcontract, d.ideducational_level, d.idexperience,
+       d.idworking_hours, d.idsalary, d.salaryvalue,
+       d.source, d.source_relevance,
        c.cp4              AS cp2021_id_level_4,
+       c.cp3              AS cp2021_id_level_3,
        e.idlevel_4        AS idesco_level_4
 FROM d
 LEFT JOIN staging.dim_cp2021_5        c ON d.cp2021_id_level_5 = c.cp5
@@ -282,22 +301,33 @@ read_skills <- function(con, ym_from, ym_to, keep_ids) {
 # predict_cp4_knn() only ever returns rows for the unlabeled subset, so a row
 # either keeps its vendor code (flag 0) or takes the imputed one (flag 1).
 # Rows that stay unresolved keep NULL in both columns.
-assemble <- function(postings, pred) {
+assemble <- function(postings, pred, pred_xgb = NULL) {
   out <- postings[, list(
     general_id,
     year_grab_date,
     month_grab_date,
     vendor_cp4 = cp2021_id_level_4
   )]
+  # Both models write into the SAME column. The k-NN supplies full CP4 codes for
+  # rows carrying an ESCO code; xgboost supplies CP3 padded to "<cp3>.0" for the
+  # ESCO-less ones. The trailing ".0" is what marks CP3 precision -- no real CP4
+  # code ends in ".0", so the two are always distinguishable.
+  srcs <- list()
   if (!is.null(pred) && nrow(pred) > 0L) {
-    p <- unique(
-      pred[
-        !is.na(cp2021_id_level_4),
-        list(general_id, imputed_cp4 = cp2021_id_level_4)
-      ],
-      by = "general_id"
-    )
-    out <- p[out, on = "general_id"]
+    srcs[[length(srcs) + 1L]] <- pred[
+      !is.na(cp2021_id_level_4),
+      list(general_id, imputed_cp4 = cp2021_id_level_4)
+    ]
+  }
+  if (!is.null(pred_xgb) && nrow(pred_xgb) > 0L) {
+    srcs[[length(srcs) + 1L]] <- pred_xgb[
+      !is.na(cp2021_id_level_4),
+      list(general_id, imputed_cp4 = cp2021_id_level_4)
+    ]
+  }
+  if (length(srcs)) {
+    pp <- unique(rbindlist(srcs), by = "general_id")
+    out <- pp[out, on = "general_id"]
   } else {
     out[, imputed_cp4 := NA_character_]
   }
@@ -331,6 +361,11 @@ reconcile <- function(out, postings) {
     ),
     "flag outside {0,1}" = all(
       out$cp4_imputed %in% c(0L, 1L) | is.na(out$cp4_imputed)
+    ),
+    # A vendor-supplied code is always a real CP4 and must never be padded.
+    "vendor row carries a CP3-padded code" = !any(
+      out$cp4_imputed == 0L & grepl("\\.0$", out$cp2021_id_level_4),
+      na.rm = TRUE
     )
   )
   # A vendor code must never be overwritten by an imputed one.
@@ -350,6 +385,133 @@ reconcile <- function(out, postings) {
     .die(1L, "imputation overwrote ", nrow(bad), " vendor-supplied codes")
   }
   invisible(TRUE)
+}
+
+# 9b. ESCO-less rows: vtreat recipe + xgboost, predicting CP3 -----
+#
+# These postings carry idesco_level_5 = "Unclassifiable", so there is no ESCO
+# code at any level and the crosswalk has no candidate set to restrict to. The
+# k-NN rescue reaches only ~67% CP3 on them; this model reaches ~77.5%, and it
+# is the only one that can classify a posting with NO skills at all (81.5% vs
+# 69.7%), because it uses city, sector, source, contract, education and salary.
+#
+# It predicts CP3, not CP4 -- 378-class CP4 needs a ~33 GB dense vtreat frame
+# and days of fitting, against ~10 GB and minutes for CP3. The CP3 code is then
+# padded to CP4 shape with a trailing ".0" so a single column carries both.
+# That padding is unambiguous: of 510 real CP4 codes none ends in ".0", and no
+# padded CP3 collides with a real CP4.
+
+XGB_COVARS <- c(
+  "idcity", "idprovince", "idsector", "idmacro_sector", "idcategory_sector",
+  "idcontract", "ideducational_level", "idexperience", "idworking_hours",
+  "idsalary", "salaryvalue", "source", "source_relevance",
+  "month_grab_date", "n_skills"
+)
+
+pad_cp3 <- function(cp3) fifelse(is.na(cp3), NA_character_, paste0(cp3, ".0"))
+
+xgb_impute_no_esco <- function(postings, skills) {
+  for (pkg in c("vtreat", "xgboost", "Matrix")) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+      .die(2L, "IMPUTE_XGB is on but package not in the image: ", pkg)
+    }
+  }
+  d <- postings[is.na(idesco_level_4)]
+  if (nrow(d) == 0L) {
+    return(NULL)
+  }
+  n_sk <- skills[, list(n_skills = .N), by = general_id]
+  d <- n_sk[d, on = "general_id"]
+  d[is.na(n_skills), n_skills := 0L]
+  for (v in XGB_COVARS) {
+    if (is.character(d[[v]])) set(d, j = v, value = as.character(d[[v]]))
+  }
+
+  lab <- d[!is.na(cp2021_id_level_3)]
+  unl <- d[is.na(cp2021_id_level_3)]
+  if (nrow(lab) < 500L || nrow(unl) == 0L) {
+    .warn("too few labelled ESCO-less rows (", nrow(lab), ") to fit xgboost")
+    return(NULL)
+  }
+
+  # Fold the unlearnable tail: codes with too few examples cannot be predicted
+  # and would only waste impact columns.
+  cls <- lab[, .N, by = cp2021_id_level_3]
+  rare <- cls[N < cfg$xgb_rare_min, cp2021_id_level_3]
+  lab[, y := fifelse(cp2021_id_level_3 %chin% rare, "other", cp2021_id_level_3)]
+  .info(sprintf(
+    "xgb: %d labelled / %d to predict | %d CP3 classes, %d folded into 'other'",
+    nrow(lab), nrow(unl), nrow(cls), length(rare)
+  ))
+
+  A <- lab[year_grab_date * 100L + month_grab_date <= cfg$xgb_period_a_end]
+  if (nrow(A) < 200L) A <- lab
+  .info("xgb: fitting vtreat recipe on ", nrow(A), " rows")
+  set.seed(cfg$seed)
+  t0 <- proc.time()
+  tp <- vtreat::mkCrossFrameMExperiment(
+    dframe = as.data.frame(A[, c(XGB_COVARS, "y"), with = FALSE]),
+    varlist = XGB_COVARS, outcomename = "y", verbose = FALSE
+  )
+  treat_cols <- setdiff(colnames(tp$cross_frame), "y")
+  .info(sprintf("xgb: vtreat %.0fs -> %d treated columns",
+                (proc.time() - t0)[["elapsed"]], length(treat_cols)))
+
+  skill_levels <- sort(unique(skills$escoskill_level_3))
+  .skmat <- function(gids) {
+    sr <- skills[general_id %chin% gids]
+    Matrix::sparseMatrix(
+      i = match(sr$general_id, gids),
+      j = match(sr$escoskill_level_3, skill_levels),
+      x = 1, dims = c(length(gids), length(skill_levels))
+    )
+  }
+  .design <- function(x) {
+    tr <- as.data.table(vtreat::prepare(
+      tp$treat_m, as.data.frame(x[, XGB_COVARS, with = FALSE])
+    ))[, treat_cols, with = FALSE]
+    cbind(as(as.matrix(tr), "dgCMatrix"), .skmat(x$general_id))
+  }
+  X_A <- cbind(
+    as(as.matrix(as.data.table(tp$cross_frame)[, treat_cols, with = FALSE]),
+       "dgCMatrix"),
+    .skmat(A$general_id)
+  )
+  B <- lab[!general_id %chin% A$general_id]
+  X_fit <- if (nrow(B) > 0L) rbind(X_A, .design(B)) else X_A
+  fit_rows <- if (nrow(B) > 0L) rbindlist(list(A, B)) else A
+
+  lev <- sort(unique(lab$y))
+  y_fit <- match(fit_rows$y, lev) - 1L
+  stopifnot(!anyNA(y_fit))
+  .info("xgb: training on ", nrow(X_fit), " x ", ncol(X_fit),
+        ", ", length(lev), " classes")
+  t0 <- proc.time()
+  set.seed(cfg$seed)
+  bst <- xgboost::xgb.train(
+    params = list(
+      objective = "multi:softprob", num_class = length(lev),
+      eval_metric = "mlogloss", tree_method = "hist",
+      max_depth = 8, eta = 0.2, subsample = 0.8, colsample_bytree = 0.5,
+      min_child_weight = 5,
+      nthread = max(1L, parallel::detectCores() - 2L)
+    ),
+    data = xgboost::xgb.DMatrix(X_fit, label = y_fit),
+    nrounds = cfg$xgb_rounds, verbose = 0
+  )
+  .info(sprintf("xgb: trained in %.0fs", (proc.time() - t0)[["elapsed"]]))
+
+  X_new <- .design(unl)
+  # xgboost >= 2.0 returns multi:softprob already shaped n x num_class;
+  # reshaping it again scrambles every row.
+  pm <- predict(bst, xgboost::xgb.DMatrix(X_new))
+  if (is.null(dim(pm))) pm <- matrix(pm, ncol = length(lev), byrow = TRUE)
+  stopifnot(nrow(pm) == nrow(unl), ncol(pm) == length(lev))
+  pred <- lev[max.col(pm, ties.method = "first")]
+  out <- data.table(general_id = unl$general_id, cp3 = pred)
+  out <- out[cp3 != "other"] # the folded bucket is not a real code
+  .info("xgb: predicted ", nrow(out), " of ", nrow(unl), " ESCO-less rows")
+  out[, list(general_id, cp2021_id_level_4 = pad_cp3(cp3), method = "xgb_cp3")]
 }
 
 # 10. Writes -----
@@ -644,7 +806,10 @@ main <- function() {
     k = cfg$k,
     sector_boost = cfg$sector_boost,
     max_train = cfg$max_train,
-    rescue_no_match = cfg$rescue,
+    # With IMPUTE_XGB on, the ESCO-less rows belong to xgboost, so the k-NN's
+    # own rescue path is switched off to avoid two models claiming the same
+    # rows. Measured: k-NN 66.8% vs xgboost 77.5% CP3 there.
+    rescue_no_match = cfg$rescue && !cfg$xgb,
     rescue_k = cfg$rescue_k,
     rescue_max_train = cfg$rescue_max_train,
     verbose = TRUE
@@ -658,8 +823,16 @@ main <- function() {
     )
   }
 
+  # -- ESCO-less rows: xgboost, CP3 padded into the same column --
+  pred_xgb <- NULL
+  if (cfg$xgb) {
+    t0 <- proc.time()
+    pred_xgb <- xgb_impute_no_esco(postings, skills)
+    .info("xgb path done in ", round((proc.time() - t0)[["elapsed"]], 1), "s")
+  }
+
   # -- assemble and check --
-  out <- assemble(postings, pred)
+  out <- assemble(postings, pred, pred_xgb)
   if (d$mode == "incremental") {
     out <- out[year_grab_date * 100L + month_grab_date %in% d$months]
     reconcile(out, postings[ym %in% d$months])
