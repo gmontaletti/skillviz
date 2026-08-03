@@ -14,7 +14,8 @@
   freq_cp4,
   k,
   sector_boost,
-  max_train = 50000L
+  max_train = 50000L,
+  dense_budget = 2e+08
 )
 }
 \arguments{

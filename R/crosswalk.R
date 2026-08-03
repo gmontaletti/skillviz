@@ -515,7 +515,8 @@ classify_esco_to_cpi <- function(
   freq_cp4,
   k,
   sector_boost,
-  max_train = 50000L
+  max_train = 50000L,
+  dense_budget = 2e8
 ) {
   # 4a. Edge case: no skills -----
   if (
@@ -605,7 +606,13 @@ classify_esco_to_cpi <- function(
 
   # 4d. Batched Jaccard k-NN vote -----
   # Process test rows in batches to avoid dense matrix OOM on large groups
-  batch_size <- max(1L, as.integer(2e8 / length(train_gids)))
+  # dense_budget caps the ELEMENTS of the dense test x train block. Each batch
+  # holds three such matrices at once (the intersection, the outer() union and
+  # the ratio), so peak memory is roughly 24 bytes per budgeted element: the
+  # 2e8 default costs ~4.8 GB and OOM-killed a 7.75 GB container on the
+  # 24-month window. Batching only chunks the work -- each test row is scored
+  # independently -- so lowering this changes memory, never results.
+  batch_size <- max(1L, as.integer(dense_budget / length(train_gids)))
   n_test <- length(test_gids)
   out <- vector("list", n_test)
   oi <- 0L
@@ -820,6 +827,12 @@ classify_esco_to_cpi <- function(
 #'   untouched. The cap does fire on the current 24-month window — ESCO group
 #'   5223 carries about 52,700 labelled rows — so raise it to use those groups
 #'   whole, at the cost of a dense `test x train` block that grows with it.
+#' @param dense_budget Numeric cap on the number of elements in the dense
+#'   `test x train` similarity block (default 2e8). Each batch holds three such
+#'   matrices at once, so peak memory is roughly 24 bytes per budgeted element
+#'   -- the default costs about 4.8 GB, which OOM-kills an 8 GB container on the
+#'   24-month window. Lowering it only chunks the work into more batches; every
+#'   test row is scored independently, so results are unchanged.
 #' @param rescue_no_match Logical: when TRUE, announcements that would be
 #'   `no_match` for want of an `idesco_level_4` but that do carry skills are
 #'   classified by an unrestricted k-NN over the whole labeled pool, and
@@ -997,6 +1010,7 @@ predict_cp4_knn <- function(
   k = 7L,
   sector_boost = 3.0,
   max_train = 50000L,
+  dense_budget = 2e8,
   rescue_no_match = FALSE,
   rescue_k = 10L,
   rescue_max_train = 200000L,
@@ -1191,7 +1205,8 @@ predict_cp4_knn <- function(
       freq_cp4 = freq_cp4,
       k = k,
       sector_boost = sector_boost,
-      max_train = max_train
+      max_train = max_train,
+      dense_budget = dense_budget
     )
 
     n_processed <- n_processed + 1L

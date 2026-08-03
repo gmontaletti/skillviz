@@ -145,6 +145,11 @@ cfg <- list(
   # Per-ESCO-group training cap. The subsample is a deterministic stride, so
   # exceeding it costs training data but not reproducibility.
   max_train = getenv_int("IMPUTE_MAX_TRAIN", 50000L),
+  # Elements in the dense test x train block. Each batch holds three such
+  # matrices, so peak memory is ~24 bytes per element: the package default of
+  # 2e8 costs ~4.8 GB and OOM-killed (exit 137) a 7.75 GB container on the
+  # 24-month window. 2.5e7 costs ~600 MB. Only chunking changes, not results.
+  dense_budget = as.numeric(getenv_default("IMPUTE_DENSE_BUDGET", "2.5e7")),
   # ESCO-less rows go to a vtreat + xgboost model instead of the k-NN rescue.
   # Measured on 60,002 held-out rows: the k-NN wins where an ESCO code exists
   # (88.3% vs 85.0% CP3, because its exact candidate-set restriction beats
@@ -814,6 +819,7 @@ main <- function() {
     k = cfg$k,
     sector_boost = cfg$sector_boost,
     max_train = cfg$max_train,
+    dense_budget = cfg$dense_budget,
     # With IMPUTE_XGB on, the ESCO-less rows belong to xgboost, so the k-NN's
     # own rescue path is switched off to avoid two models claiming the same
     # rows. Measured: k-NN 66.8% vs xgboost 77.5% CP3 there.

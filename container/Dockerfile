@@ -22,11 +22,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # 2. System dependencies ------------------------------------------------------
 # libpq5: RPostgres client library. procps: `ps`, used by the lock file for
 # stale-PID detection. git: remotes needs it to resolve the Remotes: field.
+# libglpk40 / libxml2 / libgmp10: igraph's binary links against all three and
+# fails to LOAD without them -- skillviz Imports igraph, so the package cannot
+# be attached at all. The build's load-check catches this rather than cron.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
       git \
       libpq5 \
+      libglpk40 \
+      libxml2 \
+      libgmp10 \
       build-essential \
       locales \
       procps \
