@@ -57,6 +57,7 @@ sector boosting that gives higher weight to same-sector neighbors.</p>
 <span>  k <span class="op">=</span> <span class="fl">7L</span>,</span>
 <span>  sector_boost <span class="op">=</span> <span class="fl">3</span>,</span>
 <span>  max_train <span class="op">=</span> <span class="fl">50000L</span>,</span>
+<span>  dense_budget <span class="op">=</span> <span class="fl">2e+08</span>,</span>
 <span>  rescue_no_match <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  rescue_k <span class="op">=</span> <span class="fl">10L</span>,</span>
 <span>  rescue_max_train <span class="op">=</span> <span class="fl">200000L</span>,</span>
@@ -98,6 +99,15 @@ over the existing row order, so results are reproducible and the RNG is
 untouched. The cap does fire on the current 24-month window — ESCO group
 5223 carries about 52,700 labelled rows — so raise it to use those groups
 whole, at the cost of a dense <code>test x train</code> block that grows with it.</p></dd>
+
+
+<dt id="arg-dense-budget">dense_budget<a class="anchor" aria-label="anchor" href="#arg-dense-budget"></a></dt>
+<dd><p>Numeric cap on the number of elements in the dense
+<code>test x train</code> similarity block (default 2e8). Each batch holds three such
+matrices at once, so peak memory is roughly 24 bytes per budgeted element
+– the default costs about 4.8 GB, which OOM-kills an 8 GB container on the
+24-month window. Lowering it only chunks the work into more batches; every
+test row is scored independently, so results are unchanged.</p></dd>
 
 
 <dt id="arg-rescue-no-match">rescue_no_match<a class="anchor" aria-label="anchor" href="#arg-rescue-no-match"></a></dt>

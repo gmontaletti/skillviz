@@ -15,6 +15,7 @@ predict_cp4_knn(
   k = 7L,
   sector_boost = 3,
   max_train = 50000L,
+  dense_budget = 2e+08,
   rescue_no_match = FALSE,
   rescue_k = 10L,
   rescue_max_train = 200000L,
@@ -56,6 +57,15 @@ predict_cp4_knn(
   group 5223 carries about 52,700 labelled rows — so raise it to use
   those groups whole, at the cost of a dense `test x train` block that
   grows with it.
+
+- dense_budget:
+
+  Numeric cap on the number of elements in the dense `test x train`
+  similarity block (default 2e8). Each batch holds three such matrices
+  at once, so peak memory is roughly 24 bytes per budgeted element – the
+  default costs about 4.8 GB, which OOM-kills an 8 GB container on the
+  24-month window. Lowering it only chunks the work into more batches;
+  every test row is scored independently, so results are unchanged.
 
 - rescue_no_match:
 

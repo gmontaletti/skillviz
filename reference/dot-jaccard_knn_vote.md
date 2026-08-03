@@ -17,7 +17,8 @@ neighbors, and performs a weighted vote with optional sector boosting.
   freq_cp4,
   k,
   sector_boost,
-  max_train = 50000L
+  max_train = 50000L,
+  dense_budget = 2e+08
 )
 ```
 
