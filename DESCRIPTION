@@ -25,7 +25,10 @@ Imports:
     igraph,
     itaposts,
     Matrix,
+    Rcpp,
     collapse
+LinkingTo:
+    Rcpp
 Suggests:
     ggplot2,
     ggraph,

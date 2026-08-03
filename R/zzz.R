@@ -7,6 +7,7 @@ NULL
 
 utils::globalVariables(c(
   ".",
+  "idx",
   ".N",
   ".SD",
   ".I",

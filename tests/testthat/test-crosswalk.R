@@ -516,3 +516,85 @@ test_that("max_train default leaves small groups untouched and silent", {
   )
   expect_identical(a, b)
 })
+
+# 3d. .global_knn_vote (Rcpp) semantics -----
+
+# These pin the exact selection and vote behaviour of the compiled kernel. The
+# expectations were snapshotted from an implementation proven identical to the
+# former pure-R reference across 144 randomised tie-dense configurations and 9
+# edge cases; the reference has since been removed, so these are the contract.
+.gkv_fixture <- function() {
+  sk <- data.table::data.table(
+    general_id = c("a", "a", "b", "b", "c", "c", "d", "d", "e", "e"),
+    escoskill_level_3 = c("s1", "s2", "s1", "s2", "s1", "s3", "s2", "s3", "s1", "s2")
+  )
+  tr <- data.table::data.table(
+    general_id = c("a", "b", "c", "d", "e"),
+    cp2021_id_level_4 = c("1.1.1.1", "1.1.1.1", "1.1.1.2", "1.1.1.2", "1.1.1.3")
+  )[sk, on = "general_id"]
+  list(
+    tr = tr,
+    te = data.table::data.table(
+      general_id = c("t1", "t1"), escoskill_level_3 = c("s1", "s2")
+    )
+  )
+}
+
+test_that(".global_knn_vote returns the expected winner and confidence", {
+  d <- .gkv_fixture()
+  r <- skillviz:::.global_knn_vote(
+    "t1", d$te, d$tr, NA_character_, NULL, 3L, 1, 1e6
+  )
+  expect_equal(nrow(r), 1L)
+  expect_equal(r$cp2021_id_level_4, "1.1.1.1")
+  expect_equal(r$confidence, 2 / 3, tolerance = 1e-9)
+  expect_equal(r$method, "knn_global")
+})
+
+test_that(".global_knn_vote applies the sector boost after selection", {
+  d <- .gkv_fixture()
+  sect <- stats::setNames(c("C", "F", "C", "F", "C"), c("a", "b", "c", "d", "e"))
+  r <- skillviz:::.global_knn_vote("t1", d$te, d$tr, "C", sect, 3L, 5, 1e6)
+  expect_equal(r$cp2021_id_level_4, "1.1.1.1")
+  # Boosting the same-sector neighbours changes the vote share, not the winner.
+  expect_equal(r$confidence, 6 / 11, tolerance = 1e-9)
+})
+
+test_that(".global_knn_vote honours k", {
+  d <- .gkv_fixture()
+  r <- skillviz:::.global_knn_vote(
+    "t1", d$te, d$tr, NA_character_, NULL, 1L, 1, 1e6
+  )
+  # A single neighbour means the winner takes the whole vote.
+  expect_equal(r$confidence, 1)
+})
+
+test_that(".global_knn_vote returns NULL on degenerate input", {
+  d <- .gkv_fixture()
+  empty <- data.table::data.table(
+    general_id = character(), escoskill_level_3 = character(),
+    cp2021_id_level_4 = character()
+  )
+  expect_null(skillviz:::.global_knn_vote(
+    "t1", d$te, empty, NA_character_, NULL, 3L, 1, 1e6
+  ))
+  # No shared skills => no non-zero similarity => nothing to vote on.
+  disjoint <- data.table::copy(d$te)[
+    , escoskill_level_3 := paste0("z", escoskill_level_3)
+  ]
+  expect_null(skillviz:::.global_knn_vote(
+    "t1", disjoint, d$tr, NA_character_, NULL, 3L, 1, 1e6
+  ))
+  # Every training CP4 missing => every candidate filtered out.
+  allna <- data.table::copy(d$tr)[, cp2021_id_level_4 := NA_character_]
+  expect_null(skillviz:::.global_knn_vote(
+    "t1", d$te, allna, NA_character_, NULL, 3L, 1, 1e6
+  ))
+})
+
+test_that(".global_knn_vote is deterministic under the train-pool cap", {
+  d <- .gkv_fixture()
+  a <- skillviz:::.global_knn_vote("t1", d$te, d$tr, NA_character_, NULL, 3L, 1, 2L)
+  b <- skillviz:::.global_knn_vote("t1", d$te, d$tr, NA_character_, NULL, 3L, 1, 2L)
+  expect_identical(a, b)
+})
