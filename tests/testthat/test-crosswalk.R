@@ -723,7 +723,31 @@ test_that("predict_cp4_knn is bit-identical to the pre-CP5 baseline", {
       a$max_train,
       a$rescue_no_match
     )
-    expect_identical(got, case$result, info = label)
+    # The DECISIONS must be bit-identical: which code, by which route, for which
+    # announcement. Those are what a refactor can break, and they are discrete.
+    expect_identical(got$general_id, case$result$general_id, info = label)
+    expect_identical(
+      got$cp2021_id_level_4,
+      case$result$cp2021_id_level_4,
+      info = label
+    )
+    expect_identical(got$method, case$result$method, info = label)
+    expect_identical(names(got), names(case$result), info = label)
+
+    # `confidence` is compared to a tolerance, not bit-for-bit. It is a ratio of
+    # sums produced by Matrix::tcrossprod(), so its last bits depend on the BLAS
+    # summation order: the fixture was generated on macOS/Accelerate and CI runs
+    # on Ubuntu with a different BLAS, which moves values by 1-2 ULP
+    # (0.519999999999999907 against 0.520000000000000018). Pinning that would be
+    # pinning the build machine, not the behaviour. 1e-12 is ~4 orders of
+    # magnitude above the observed drift and far below any change a real
+    # regression would cause -- which would move a code, not the 16th digit.
+    expect_equal(
+      got$confidence,
+      case$result$confidence,
+      tolerance = 1e-12,
+      info = label
+    )
     expect_identical(w, case$warnings, info = label)
   }
 })
@@ -821,8 +845,11 @@ test_that("predict_cp4_knn is bit-identical to the pre-CP5 baseline", {
 test_that("predict_cp5_knn returns level-5 codes for unlabeled rows", {
   f <- .cp5_fixture()
   res <- predict_cp5_knn(
-    f$postings, f$skills,
-    restrictor = "idesco_level_4", k = 3L, verbose = FALSE
+    f$postings,
+    f$skills,
+    restrictor = "idesco_level_4",
+    k = 3L,
+    verbose = FALSE
   )
 
   expect_true(data.table::is.data.table(res))
@@ -840,8 +867,11 @@ test_that("predict_cp5_knn returns level-5 codes for unlabeled rows", {
 test_that("predict_cp5_knn ignores a cp2021_id_level_4 column in postings", {
   f <- .cp5_fixture()
   with_cp4 <- predict_cp5_knn(
-    f$postings, f$skills,
-    restrictor = "idesco_level_4", k = 3L, verbose = FALSE
+    f$postings,
+    f$skills,
+    restrictor = "idesco_level_4",
+    k = 3L,
+    verbose = FALSE
   )
   without <- predict_cp5_knn(
     f$postings[, !"cp2021_id_level_4"],
@@ -871,8 +901,10 @@ test_that("predict_cp5_knn returns an empty table named at level 5", {
   full <- data.table::copy(f$postings)
   full[, cp2021_id_level_5 := "1.1.1.1.1"]
   res <- predict_cp5_knn(
-    full, f$skills,
-    restrictor = "idesco_level_4", verbose = FALSE
+    full,
+    f$skills,
+    restrictor = "idesco_level_4",
+    verbose = FALSE
   )
   expect_identical(nrow(res), 0L)
   expect_named(
@@ -1158,12 +1190,19 @@ test_that("the level-5 restrictor still routes no_match rows to the rescue", {
 test_that("build_esco_cp_crosswalk accounts for every code in the universe", {
   postings <- data.table::data.table(
     idesco_level_5 = c(
-      rep("1000.1", 4L), rep("1000.2", 3L),
-      "2000.1", "Unclassifiable"
+      rep("1000.1", 4L),
+      rep("1000.2", 3L),
+      "2000.1",
+      "Unclassifiable"
     ),
     cp2021_id_level_5 = c(
-      "1.1.1.1.1", "1.1.1.1.1", "1.1.1.1.2", NA,
-      "2.2.2.2.0", "2.2.2.2.0", "2.2.2.2.0",
+      "1.1.1.1.1",
+      "1.1.1.1.1",
+      "1.1.1.1.2",
+      NA,
+      "2.2.2.2.0",
+      "2.2.2.2.0",
+      "2.2.2.2.0",
       # 2000.1 appears in postings but never carries a code
       NA,
       "3.3.3.3.0"
@@ -1204,7 +1243,10 @@ test_that("build_esco_cp_crosswalk accounts for every code in the universe", {
     cw$candidates[idesco_level_5 == "1000.1", rank],
     c(1L, 2L)
   )
-  expect_equal(cw$candidates[idesco_level_5 == "1000.1", cum_share], c(2 / 3, 1))
+  expect_equal(
+    cw$candidates[idesco_level_5 == "1000.1", cum_share],
+    c(2 / 3, 1)
+  )
 })
 
 test_that("build_esco_cp_crosswalk excludes sentinel groups from candidates", {
@@ -1288,9 +1330,13 @@ test_that("strata_col flags a mode that only holds for the coded sample", {
     source = c(rep("A", 12L), rep("B", 18L)),
     cp2021_id_level_5 = c(
       # source A: 10 coded, mostly X
-      rep("1.1.1.1.1", 8L), rep("2.2.2.2.0", 2L), NA, NA,
+      rep("1.1.1.1.1", 8L),
+      rep("2.2.2.2.0", 2L),
+      NA,
+      NA,
       # source B: 4 coded, all Y -- and 14 uncoded, so B dominates the target
-      rep("2.2.2.2.0", 4L), rep(NA_character_, 14L)
+      rep("2.2.2.2.0", 4L),
+      rep(NA_character_, 14L)
     )
   )
 
@@ -1298,7 +1344,11 @@ test_that("strata_col flags a mode that only holds for the coded sample", {
   expect_true(all(is.na(plain$groups$modal_stable)))
   expect_identical(plain$groups[idesco_level_5 == "G", code_modal], "1.1.1.1.1")
 
-  wt <- build_esco_cp_crosswalk(postings, strata_col = "source", verbose = FALSE)
+  wt <- build_esco_cp_crosswalk(
+    postings,
+    strata_col = "source",
+    verbose = FALSE
+  )
   g <- wt$groups[idesco_level_5 == "G"]
   expect_identical(g$code_modal, "1.1.1.1.1")
   expect_identical(g$code_modal_rw, "2.2.2.2.0")
@@ -1312,7 +1362,11 @@ test_that("strata_col leaves a mode alone when coding is balanced", {
     # Both sources agree, and both are half coded.
     cp2021_id_level_5 = rep(c(rep("1.1.1.1.1", 4L), NA, NA), length.out = 20L)
   )
-  wt <- build_esco_cp_crosswalk(postings, strata_col = "source", verbose = FALSE)
+  wt <- build_esco_cp_crosswalk(
+    postings,
+    strata_col = "source",
+    verbose = FALSE
+  )
   g <- wt$groups[idesco_level_5 == "G"]
   expect_true(g$modal_stable)
   expect_identical(g$code_modal, g$code_modal_rw)
