@@ -1,9 +1,14 @@
 #!/usr/bin/env Rscript
 # impute_cp4.R — containerised CP2021 level-4 imputation, Postgres in / staging out
 #
-# Reads OJA postings from Postgres, fills the missing CP2021 level-4 codes with
-# skillviz::predict_cp4_knn(), and writes a table carrying the vendor code and
-# the imputed code in one column plus a flag saying which is which.
+# Reads OJA postings from Postgres, fills the missing CP2021 codes, and writes a
+# table carrying vendor and imputed codes at levels 4 and 5, each with a flag
+# saying which is which.
+#
+# One k-NN pass does the work: skillviz::predict_cp5_knn() votes at level 5 with
+# the candidate space restricted on idesco_level_5, and the level-4 code is read
+# off by truncation. Announcements with no ESCO code at any level cannot be
+# restricted, so they go to a one-hot + xgboost model instead.
 #
 # Run modes, decided from which months already exist in the target table:
 #   target absent, or every month missing, or more than
@@ -150,15 +155,20 @@ cfg <- list(
   # 2e8 costs ~4.8 GB and OOM-killed (exit 137) a 7.75 GB container on the
   # 24-month window. 2.5e7 costs ~600 MB. Only chunking changes, not results.
   dense_budget = as.numeric(getenv_default("IMPUTE_DENSE_BUDGET", "2.5e7")),
-  # ESCO-less rows go to a vtreat + xgboost model instead of the k-NN rescue.
-  # Measured on 60,002 held-out rows: the k-NN wins where an ESCO code exists
-  # (88.3% vs 85.0% CP3, because its exact candidate-set restriction beats
-  # impact-coded ESCO), and loses badly where one does not (66.8% vs 77.5%).
-  # So each segment gets the model that wins on it.
+  # ESCO-less rows go to a one-hot + xgboost model instead of the k-NN rescue.
+  # The k-NN wins where an ESCO code exists, because its exact candidate-set
+  # restriction beats anything the covariates can do; where none exists that
+  # restriction is unavailable and the covariates win instead (66.8% vs 77.5%
+  # CP3 when this was measured). So each segment gets the model that wins on it.
   xgb = getenv_flag("IMPUTE_XGB", TRUE),
   xgb_rare_min = getenv_int("IMPUTE_XGB_RARE_MIN", 30L),
   xgb_rounds = getenv_int("IMPUTE_XGB_ROUNDS", 400L),
-  xgb_period_a_end = getenv_int("IMPUTE_XGB_PERIOD_A_END", 202412L),
+  # Level 5 is no longer optional: it IS the model. The single k-NN pass votes
+  # at level 5 restricted on idesco_level_5, and the level-4 column is read off
+  # by truncation. There is no flag to turn that off, because there is no
+  # cheaper level-4 path left to fall back to -- the level-5 pass is itself
+  # ~30% faster than the level-4 one it replaced (541s against 772s on the
+  # 24-month window) and 0.8 GB lighter.
   seed = getenv_int("IMPUTE_SEED", 42L),
   lock_dir = getenv_default("IMPUTE_LOCK_DIR", tempdir())
 )
@@ -279,7 +289,14 @@ SELECT d.general_id,
        d.source, d.source_relevance,
        c.cp4              AS cp2021_id_level_4,
        c.cp3              AS cp2021_id_level_3,
-       e.idlevel_4        AS idesco_level_4
+       -- c.cp5, never d.cp2021_id_level_5: the join to the dimension is what
+       -- filters malformed vendor codes today, and taking the raw column would
+       -- quietly let one through at level 5 while level 4 kept rejecting it.
+       c.cp5              AS cp2021_id_level_5,
+       e.idlevel_4        AS idesco_level_4,
+       -- The level-5 occupation key is the restrictor the coder now uses. It
+       -- was already in the CTE as a join key; this projects it.
+       d.idesco_level_5   AS idesco_level_5
 FROM d
 LEFT JOIN staging.dim_cp2021_5        c ON d.cp2021_id_level_5 = c.cp5
 LEFT JOIN public.lightcast_dim_occ_esco e ON d.idesco_level_5   = e.idlevel_5
@@ -296,6 +313,49 @@ read_postings <- function(con, ym_from, ym_to) {
   dt <- setDT(DBI::dbGetQuery(con, SQL_POSTINGS, params = list(ym_from, ym_to)))
   dt[, general_id := as.character(general_id)]
   dt[, ym := year_grab_date * 100L + month_grab_date]
+  # staging.dim_cp2021_5 is an external table with no DDL in this repo, so its
+  # shape is asserted rather than trusted. Both held on the whole 24-month
+  # window at the time of writing: 813 CP5 codes, all well formed, all with
+  # left(cp5, 7) = cp4. A violation would silently corrupt the level-5 column
+  # and break the hierarchy check in reconcile().
+  bad_shape <- dt[
+    !is.na(cp2021_id_level_5) &
+      !grepl("^[0-9]\\.[0-9]\\.[0-9]\\.[0-9]\\.[0-9]$", cp2021_id_level_5),
+    .N
+  ]
+  if (bad_shape > 0L) {
+    .die(1L, bad_shape, " rows carry a malformed cp2021_id_level_5")
+  }
+  bad_hier <- dt[
+    !is.na(cp2021_id_level_5) &
+      substring(cp2021_id_level_5, 1L, 7L) != cp2021_id_level_4,
+    .N
+  ]
+  if (bad_hier > 0L) {
+    .die(1L, bad_hier, " rows where left(cp5, 7) does not equal cp4")
+  }
+
+  # The level-5 occupation key marks "no ESCO code" with the literal string
+  # "Unclassifiable", never NULL. Every downstream predicate here tests
+  # is.na(), so the sentinel is normalised once, at the boundary, rather than
+  # in five places. The package does the same defensively; both layers have to
+  # be correct on their own because the routing below is container-local.
+  n_unc <- dt[idesco_level_5 == "Unclassifiable", .N]
+  dt[idesco_level_5 == "Unclassifiable", idesco_level_5 := NA_character_]
+  .info("normalised ", n_unc, " Unclassifiable level-5 codes to NA")
+
+  # Both ESCO columns derive from the same join, so their NA-ness must coincide.
+  # A divergence means lightcast_dim_occ_esco changed shape and the routing
+  # below would silently send rows to the wrong model.
+  n_div <- dt[is.na(idesco_level_5) != is.na(idesco_level_4), .N]
+  if (n_div > 0L) {
+    .die(
+      1L,
+      n_div,
+      " rows where idesco_level_4 and idesco_level_5 disagree on being NA; ",
+      "the occupation dimension has changed shape"
+    )
+  }
   dt[]
 }
 
@@ -310,36 +370,57 @@ read_skills <- function(con, ym_from, ym_to, keep_ids) {
 # predict_cp4_knn() only ever returns rows for the unlabeled subset, so a row
 # either keeps its vendor code (flag 0) or takes the imputed one (flag 1).
 # Rows that stay unresolved keep NULL in both columns.
-assemble <- function(postings, pred, pred_xgb = NULL) {
+assemble <- function(postings, preds) {
   out <- postings[, list(
     general_id,
     year_grab_date,
     month_grab_date,
-    vendor_cp4 = cp2021_id_level_4
+    vendor_cp4 = cp2021_id_level_4,
+    vendor_cp5 = cp2021_id_level_5
   )]
-  # Both models write into the SAME column. The k-NN supplies full CP4 codes for
-  # rows carrying an ESCO code; xgboost supplies CP3 padded to "<cp3>.0" for the
-  # ESCO-less ones. The trailing ".0" is what marks CP3 precision -- no real CP4
-  # code ends in ".0", so the two are always distinguishable.
-  srcs <- list()
-  if (!is.null(pred) && nrow(pred) > 0L) {
-    srcs[[length(srcs) + 1L]] <- pred[
-      !is.na(cp2021_id_level_4),
-      list(general_id, imputed_cp4 = cp2021_id_level_4)
-    ]
-  }
-  if (!is.null(pred_xgb) && nrow(pred_xgb) > 0L) {
-    srcs[[length(srcs) + 1L]] <- pred_xgb[
-      !is.na(cp2021_id_level_4),
-      list(general_id, imputed_cp4 = cp2021_id_level_4)
-    ]
-  }
-  if (length(srcs)) {
-    pp <- unique(rbindlist(srcs), by = "general_id")
+
+  # Every model now supplies BOTH levels, and in both of them the level-4 code
+  # is the truncation of the level-5 one -- the k-NN votes at level 5, xgboost
+  # predicts at level 5, and vendor rows take both from the same
+  # staging.dim_cp2021_5 row. So there is no longer any padding, and no
+  # "one column, two precisions" convention: a level-4 code in this table is
+  # always a genuine level-4 code.
+  preds <- Filter(function(x) !is.null(x) && nrow(x) > 0L, preds)
+  if (length(preds)) {
+    pp <- unique(
+      rbindlist(lapply(preds, function(x) {
+        x[
+          !is.na(cp2021_id_level_5),
+          list(
+            general_id,
+            imputed_cp5 = cp2021_id_level_5,
+            imputed_cp4 = cp2021_id_level_4
+          )
+        ]
+      })),
+      by = "general_id"
+    )
     out <- pp[out, on = "general_id"]
   } else {
-    out[, imputed_cp4 := NA_character_]
+    out[, `:=`(imputed_cp5 = NA_character_, imputed_cp4 = NA_character_)]
   }
+
+  # A model prediction must be self-consistent across the two levels; anything
+  # else is an assembly bug, not a modelling disagreement, so it aborts rather
+  # than being silently repaired.
+  n_bad <- out[
+    !is.na(imputed_cp5) &
+      substring(imputed_cp5, 1L, 7L) != imputed_cp4,
+    .N
+  ]
+  if (n_bad > 0L) {
+    .die(
+      1L,
+      n_bad,
+      " imputed level-4 codes are not the truncation of their level-5 code"
+    )
+  }
+
   out[,
     cp2021_id_level_4 := fifelse(!is.na(vendor_cp4), vendor_cp4, imputed_cp4)
   ]
@@ -350,12 +431,25 @@ assemble <- function(postings, pred, pred_xgb = NULL) {
       fifelse(!is.na(vendor_cp4), 0L, 1L)
     )
   ]
+  out[,
+    cp2021_id_level_5 := fifelse(!is.na(vendor_cp5), vendor_cp5, imputed_cp5)
+  ]
+  out[,
+    cp5_imputed := fifelse(
+      is.na(cp2021_id_level_5),
+      NA_integer_,
+      fifelse(!is.na(vendor_cp5), 0L, 1L)
+    )
+  ]
+
   out[, list(
     general_id = as.numeric(general_id),
     year_grab_date,
     month_grab_date,
     cp2021_id_level_4,
-    cp4_imputed
+    cp4_imputed,
+    cp2021_id_level_5,
+    cp5_imputed
   )]
 }
 
@@ -371,12 +465,69 @@ reconcile <- function(out, postings) {
     "flag outside {0,1}" = all(
       out$cp4_imputed %in% c(0L, 1L) | is.na(out$cp4_imputed)
     ),
-    # A vendor-supplied code is always a real CP4 and must never be padded.
-    "vendor row carries a CP3-padded code" = !any(
-      out$cp4_imputed == 0L & grepl("\\.0$", out$cp2021_id_level_4),
+    # No level-4 code may end in ".0". Of the 510 real CP4 codes none does, so
+    # such a value could only be a level-3 code padded into level-4 shape --
+    # the convention this job used before every model predicted at level 5.
+    # The check now covers imputed rows too, not just vendor ones.
+    # NOTE it is valid at level 4 ONLY: 340 of 813 real CP5 codes end in ".0",
+    # so the same test at level 5 would reject genuine codes.
+    "a level-4 code is padded" = !any(
+      grepl("\\.0$", out$cp2021_id_level_4),
       na.rm = TRUE
     )
   )
+
+  # -- level 5, only when the columns are present --
+  if ("cp2021_id_level_5" %in% names(out)) {
+    stopifnot(
+      "cp5 flag set where no cp5 exists" = all(
+        is.na(out$cp5_imputed) == is.na(out$cp2021_id_level_5)
+      ),
+      "cp5 flag outside {0,1}" = all(
+        out$cp5_imputed %in% c(0L, 1L) | is.na(out$cp5_imputed)
+      ),
+      # A level-5 code without its level-4 parent would be unreadable.
+      "cp5 present without cp4" = !any(
+        !is.na(out$cp2021_id_level_5) & is.na(out$cp2021_id_level_4)
+      ),
+      # The whole point of the separate column: the two levels must agree.
+      # assemble() drops any imputed level-5 code that would break this.
+      "cp5 does not sit under its cp4" = all(
+        is.na(out$cp2021_id_level_5) |
+          substring(out$cp2021_id_level_5, 1L, 7L) == out$cp2021_id_level_4
+      ),
+      "cp5 is malformed" = all(
+        is.na(out$cp2021_id_level_5) |
+          grepl(
+            "^[0-9]\\.[0-9]\\.[0-9]\\.[0-9]\\.[0-9]$",
+            out$cp2021_id_level_5
+          )
+      )
+    )
+    # A vendor-supplied level-5 code must survive untouched, exactly as at
+    # level 4.
+    chk5 <- merge(
+      out[, list(
+        general_id = as.character(general_id),
+        cp2021_id_level_5,
+        cp5_imputed
+      )],
+      postings[, list(general_id, vendor_cp5 = cp2021_id_level_5)],
+      by = "general_id"
+    )
+    bad5 <- chk5[
+      !is.na(vendor_cp5) &
+        (cp5_imputed != 0L | cp2021_id_level_5 != vendor_cp5)
+    ]
+    if (nrow(bad5) > 0L) {
+      .die(
+        1L,
+        "imputation overwrote ",
+        nrow(bad5),
+        " vendor-supplied cp5 codes"
+      )
+    }
+  }
   # A vendor code must never be overwritten by an imputed one.
   chk <- merge(
     out[, list(
@@ -396,131 +547,193 @@ reconcile <- function(out, postings) {
   invisible(TRUE)
 }
 
-# 9b. ESCO-less rows: vtreat recipe + xgboost, predicting CP3 -----
+# 9b. ESCO-less rows: one-hot + xgboost, predicting CP5 -----
 #
 # These postings carry idesco_level_5 = "Unclassifiable", so there is no ESCO
-# code at any level and the crosswalk has no candidate set to restrict to. The
-# k-NN rescue reaches only ~67% CP3 on them; this model reaches ~77.5%, and it
-# is the only one that can classify a posting with NO skills at all (81.5% vs
-# 69.7%), because it uses city, sector, source, contract, education and salary.
+# code at any level and the k-NN has no candidate set to restrict to. The k-NN
+# rescue reaches only ~67% CP3 on them; this model reaches ~81%, and it is the
+# only one that can classify a posting with NO skills at all (81.5% vs 69.7%),
+# because it uses city, sector, source, contract, education and salary.
 #
-# It predicts CP3, not CP4 -- 378-class CP4 needs a ~33 GB dense vtreat frame
-# and days of fitting, against ~10 GB and minutes for CP3. The CP3 code is then
-# padded to CP4 shape with a trailing ".0" so a single column carries both.
-# That padding is unambiguous: of 510 real CP4 codes none ends in ".0", and no
-# padded CP3 collides with a real CP4.
+# It predicts CP5 directly, and the level-4 code is its truncation -- so these
+# rows now carry a genuine level-4 code rather than a level-3 one padded into
+# level-4 shape. Two findings replaced the old design, measured on the 42,530
+# labelled ESCO-less rows over a 3-month temporal holdout
+# (skillviz_workflow/run_cp5_xgboost_no_esco.R):
+#
+#   vtreat was dropped. Impact coding is both SLOWER and LESS accurate than a
+#   plain one-hot: at CP3, 736s and 80.09% against 21s and 81.34%; at CP5,
+#   2953s and 75.44% against 35s and 76.36%. It compresses every categorical
+#   into per-class scores fitted on the training rows, and it builds a DENSE
+#   frame whose width grows with the class count -- which is the whole reason
+#   level 5 was previously believed impossible here. One-hot stays sparse, so
+#   its cost does not depend on the number of classes at all: the same 1,531
+#   columns serve 56 classes and 102.
+#
+#   Level 5 is affordable. The old comment claimed CP4 needed a ~33 GB dense
+#   frame; that was a property of vtreat, not of the level. Only 102 classes
+#   survive the rare-class threshold here, and the one-hot fit takes 35s
+#   against 21s for level 3.
+#
+# The accuracy differences are ~1-2 standard errors on a 4,496-row test set and
+# should not be over-read; the 35-84x speed difference is what settles it.
 
 XGB_COVARS <- c(
-  "idcity", "idprovince", "idsector", "idmacro_sector", "idcategory_sector",
-  "idcontract", "ideducational_level", "idexperience", "idworking_hours",
-  "idsalary", "salaryvalue", "source", "source_relevance",
-  "month_grab_date", "n_skills"
+  "idcity",
+  "idprovince",
+  "idsector",
+  "idmacro_sector",
+  "idcategory_sector",
+  "idcontract",
+  "ideducational_level",
+  "idexperience",
+  "idworking_hours",
+  "idsalary",
+  "salaryvalue",
+  "source",
+  "source_relevance",
+  "month_grab_date",
+  "n_skills"
 )
 
-pad_cp3 <- function(cp3) fifelse(is.na(cp3), NA_character_, paste0(cp3, ".0"))
+# Covariates that are genuinely numeric; everything else is a code and becomes
+# an indicator, however integer-looking it is.
+XGB_NUMERIC <- c("salaryvalue", "n_skills", "month_grab_date")
 
 xgb_impute_no_esco <- function(postings, skills) {
-  for (pkg in c("vtreat", "xgboost", "Matrix")) {
+  for (pkg in c("xgboost", "Matrix")) {
     if (!requireNamespace(pkg, quietly = TRUE)) {
       .die(2L, "IMPUTE_XGB is on but package not in the image: ", pkg)
     }
   }
-  d <- postings[is.na(idesco_level_4)]
+  # Selected on the level-5 key, which is the primary one: level 4 is derived
+  # from it through the occupation dimension, so its NA-ness was only ever
+  # accidental -- a dimension that gained an 'Unclassifiable' row would have
+  # broken this predicate silently. read_postings() already asserts the two
+  # agree, so this is a no-op today and stays correct if that ever changes.
+  d <- postings[is.na(idesco_level_5)]
   if (nrow(d) == 0L) {
     return(NULL)
   }
   n_sk <- skills[, list(n_skills = .N), by = general_id]
   d <- n_sk[d, on = "general_id"]
   d[is.na(n_skills), n_skills := 0L]
-  for (v in XGB_COVARS) {
-    if (is.character(d[[v]])) set(d, j = v, value = as.character(d[[v]]))
-  }
 
-  lab <- d[!is.na(cp2021_id_level_3)]
-  unl <- d[is.na(cp2021_id_level_3)]
-  if (nrow(lab) < 500L || nrow(unl) == 0L) {
-    .warn("too few labelled ESCO-less rows (", nrow(lab), ") to fit xgboost")
+  lab_i <- which(!is.na(d$cp2021_id_level_5))
+  unl_i <- which(is.na(d$cp2021_id_level_5))
+  if (length(lab_i) < 500L || length(unl_i) == 0L) {
+    .warn(
+      "too few labelled ESCO-less rows (",
+      length(lab_i),
+      ") to fit xgboost"
+    )
     return(NULL)
   }
 
-  # Fold the unlearnable tail: codes with too few examples cannot be predicted
-  # and would only waste impact columns.
-  cls <- lab[, .N, by = cp2021_id_level_3]
-  rare <- cls[N < cfg$xgb_rare_min, cp2021_id_level_3]
-  lab[, y := fifelse(cp2021_id_level_3 %chin% rare, "other", cp2021_id_level_3)]
-  .info(sprintf(
-    "xgb: %d labelled / %d to predict | %d CP3 classes, %d folded into 'other'",
-    nrow(lab), nrow(unl), nrow(cls), length(rare)
-  ))
-
-  A <- lab[year_grab_date * 100L + month_grab_date <= cfg$xgb_period_a_end]
-  if (nrow(A) < 200L) A <- lab
-  .info("xgb: fitting vtreat recipe on ", nrow(A), " rows")
-  set.seed(cfg$seed)
-  t0 <- proc.time()
-  tp <- vtreat::mkCrossFrameMExperiment(
-    dframe = as.data.frame(A[, c(XGB_COVARS, "y"), with = FALSE]),
-    varlist = XGB_COVARS, outcomename = "y", verbose = FALSE
+  # Classes too rare to learn are folded into an "other" bucket. Rows predicted
+  # into it are dropped rather than guessed into a common class -- an honest
+  # NULL beats a confident wrong code.
+  cls <- d[lab_i, .N, by = cp2021_id_level_5]
+  rare <- cls[N < cfg$xgb_rare_min, cp2021_id_level_5]
+  y_lab <- fifelse(
+    d$cp2021_id_level_5[lab_i] %chin% rare,
+    "other",
+    d$cp2021_id_level_5[lab_i]
   )
-  treat_cols <- setdiff(colnames(tp$cross_frame), "y")
-  .info(sprintf("xgb: vtreat %.0fs -> %d treated columns",
-                (proc.time() - t0)[["elapsed"]], length(treat_cols)))
+  lev <- sort(unique(y_lab))
+  .info(
+    "xgb: ",
+    length(lab_i),
+    " labelled / ",
+    length(unl_i),
+    " to impute | ",
+    length(lev),
+    " classes (",
+    length(rare),
+    " rare folded into 'other')"
+  )
+
+  # One-hot over labelled and unlabelled together, so the two design matrices
+  # share a column space by construction rather than by a prepare() step.
+  t0 <- proc.time()
+  cv <- copy(d[, XGB_COVARS, with = FALSE])
+  for (v in setdiff(XGB_COVARS, XGB_NUMERIC)) {
+    x <- as.character(cv[[v]])
+    set(cv, j = v, value = factor(fifelse(is.na(x), "NA", x)))
+  }
+  for (v in XGB_NUMERIC) {
+    x <- as.numeric(cv[[v]])
+    set(cv, j = v, value = fifelse(is.na(x), -1, x))
+  }
+  X_cov <- Matrix::sparse.model.matrix(~ . - 1, data = cv)
 
   skill_levels <- sort(unique(skills$escoskill_level_3))
-  .skmat <- function(gids) {
-    sr <- skills[general_id %chin% gids]
-    Matrix::sparseMatrix(
-      i = match(sr$general_id, gids),
-      j = match(sr$escoskill_level_3, skill_levels),
-      x = 1, dims = c(length(gids), length(skill_levels))
-    )
-  }
-  .design <- function(x) {
-    tr <- as.data.table(vtreat::prepare(
-      tp$treat_m, as.data.frame(x[, XGB_COVARS, with = FALSE])
-    ))[, treat_cols, with = FALSE]
-    cbind(as(as.matrix(tr), "dgCMatrix"), .skmat(x$general_id))
-  }
-  X_A <- cbind(
-    as(as.matrix(as.data.table(tp$cross_frame)[, treat_cols, with = FALSE]),
-       "dgCMatrix"),
-    .skmat(A$general_id)
+  sr <- skills[general_id %chin% d$general_id]
+  X_sk <- Matrix::sparseMatrix(
+    i = match(sr$general_id, d$general_id),
+    j = match(sr$escoskill_level_3, skill_levels),
+    x = 1,
+    dims = c(nrow(d), length(skill_levels))
   )
-  B <- lab[!general_id %chin% A$general_id]
-  X_fit <- if (nrow(B) > 0L) rbind(X_A, .design(B)) else X_A
-  fit_rows <- if (nrow(B) > 0L) rbindlist(list(A, B)) else A
+  X <- cbind(X_cov, X_sk)
+  .info(sprintf(
+    "xgb: one-hot design %d x %d in %.0fs",
+    nrow(X),
+    ncol(X),
+    (proc.time() - t0)[["elapsed"]]
+  ))
 
-  lev <- sort(unique(lab$y))
-  y_fit <- match(fit_rows$y, lev) - 1L
-  stopifnot(!anyNA(y_fit))
-  .info("xgb: training on ", nrow(X_fit), " x ", ncol(X_fit),
-        ", ", length(lev), " classes")
   t0 <- proc.time()
   set.seed(cfg$seed)
   bst <- xgboost::xgb.train(
     params = list(
-      objective = "multi:softprob", num_class = length(lev),
-      eval_metric = "mlogloss", tree_method = "hist",
-      max_depth = 8, eta = 0.2, subsample = 0.8, colsample_bytree = 0.5,
+      objective = "multi:softprob",
+      num_class = length(lev),
+      eval_metric = "mlogloss",
+      tree_method = "hist",
+      max_depth = 8,
+      eta = 0.2,
+      subsample = 0.8,
+      colsample_bytree = 0.5,
       min_child_weight = 5,
       nthread = max(1L, parallel::detectCores() - 2L)
     ),
-    data = xgboost::xgb.DMatrix(X_fit, label = y_fit),
-    nrounds = cfg$xgb_rounds, verbose = 0
+    data = xgboost::xgb.DMatrix(
+      X[lab_i, , drop = FALSE],
+      label = match(y_lab, lev) - 1L
+    ),
+    nrounds = cfg$xgb_rounds,
+    verbose = 0
   )
   .info(sprintf("xgb: trained in %.0fs", (proc.time() - t0)[["elapsed"]]))
 
-  X_new <- .design(unl)
   # xgboost >= 2.0 returns multi:softprob already shaped n x num_class;
   # reshaping it again scrambles every row.
-  pm <- predict(bst, xgboost::xgb.DMatrix(X_new))
-  if (is.null(dim(pm))) pm <- matrix(pm, ncol = length(lev), byrow = TRUE)
-  stopifnot(nrow(pm) == nrow(unl), ncol(pm) == length(lev))
+  pm <- predict(bst, xgboost::xgb.DMatrix(X[unl_i, , drop = FALSE]))
+  if (is.null(dim(pm))) {
+    pm <- matrix(pm, ncol = length(lev), byrow = TRUE)
+  }
+  stopifnot(nrow(pm) == length(unl_i), ncol(pm) == length(lev))
   pred <- lev[max.col(pm, ties.method = "first")]
-  out <- data.table(general_id = unl$general_id, cp3 = pred)
-  out <- out[cp3 != "other"] # the folded bucket is not a real code
-  .info("xgb: predicted ", nrow(out), " of ", nrow(unl), " ESCO-less rows")
-  out[, list(general_id, cp2021_id_level_4 = pad_cp3(cp3), method = "xgb_cp3")]
+
+  out <- data.table(
+    general_id = d$general_id[unl_i],
+    cp2021_id_level_5 = pred
+  )
+  out <- out[cp2021_id_level_5 != "other"]
+  .info(
+    "xgb: predicted ",
+    nrow(out),
+    " of ",
+    length(unl_i),
+    " ESCO-less rows"
+  )
+  out[, list(
+    general_id,
+    cp2021_id_level_5,
+    cp2021_id_level_4 = substring(cp2021_id_level_5, 1L, 7L),
+    method = "xgb_cp5"
+  )]
 }
 
 # 10. Writes -----
@@ -752,8 +965,35 @@ main <- function() {
 
   d <- decide_mode(months_src, months_done, exists_target, cfg$max_incremental)
   if (cfg$force_full && d$mode != "full") {
-    .info("IMPUTE_FORCE_FULL set: overriding mode=", d$mode, " with a full rebuild")
+    .info(
+      "IMPUTE_FORCE_FULL set: overriding mode=",
+      d$mode,
+      " with a full rebuild"
+    )
     d <- list(mode = "full", months = months_src)
+  }
+
+  # Schema drift. decide_mode() compares months, so it cannot see that the
+  # output gained columns. An incremental run appends into the live table, and
+  # dbAppendTable fails outright when the target predates the level-5 columns.
+  # Force a full rebuild instead of dying on the first run after the change.
+  if (exists_target && d$mode == "incremental") {
+    have <- DBI::dbGetQuery(
+      con,
+      "SELECT column_name FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = $2",
+      params = list(cfg$schema, cfg$table)
+    )$column_name
+    want <- c("cp2021_id_level_5", "cp5_imputed")
+    missing <- setdiff(want, have)
+    if (length(missing)) {
+      .info(
+        "target lacks ",
+        paste(missing, collapse = ", "),
+        "; forcing a full rebuild so the new columns land atomically"
+      )
+      d <- list(mode = "full", months = months_src)
+    }
   }
   .info("mode=", d$mode, " months to impute: ", length(d$months))
   if (d$mode == "noop") {
@@ -788,54 +1028,93 @@ main <- function() {
   .info("disconnected for the compute phase")
 
   # -- training-cap visibility --
-  # predict_cp4_knn() subsamples groups above max_train by a deterministic
-  # stride, so exceeding the cap costs training data but not reproducibility.
-  # Report it instead of aborting and let the operator decide.
+  # The k-NN subsamples groups above max_train by a deterministic stride, so
+  # exceeding the cap costs training data but not reproducibility. Report it
+  # instead of aborting and let the operator decide. Grouped on the restrictor
+  # actually in use: under level 5 the largest group is ~6.8x smaller, so this
+  # will normally stay silent -- that is information, not an absence of it.
   grp <- postings[
-    !is.na(cp2021_id_level_4) & !is.na(idesco_level_4),
+    !is.na(cp2021_id_level_5) & !is.na(idesco_level_5),
     .N,
-    by = idesco_level_4
+    by = idesco_level_5
   ]
   if (nrow(grp) && max(grp$N) > cfg$max_train) {
     over <- grp[N > cfg$max_train]
     .warn(
       nrow(over),
-      " ESCO group(s) exceed IMPUTE_MAX_TRAIN=",
+      " ESCO level-5 group(s) exceed IMPUTE_MAX_TRAIN=",
       cfg$max_train,
       " (largest ",
       max(over$N),
       "); they are subsampled by a deterministic stride. Raise ",
       "IMPUTE_MAX_TRAIN to use them whole, at proportionally higher memory."
     )
+  } else if (nrow(grp)) {
+    .info(
+      "largest ESCO level-5 training group ",
+      max(grp$N),
+      ", under IMPUTE_MAX_TRAIN=",
+      cfg$max_train,
+      "; no subsampling"
+    )
   }
 
-  # -- impute --
-  n_missing <- postings[is.na(cp2021_id_level_4), .N]
+  # -- impute: ONE k-NN pass, at level 5, restricted on ESCO level 5 --
+  # The level-4 code is then read off by truncation rather than voted
+  # separately. Two measurements license this:
+  #
+  #   Truncating the level-5 argmax reproduces the level-4 argmax to within
+  #   +0.004 pp contemporaneously and +0.02 pp walk-forward, changing 0.07% of
+  #   predictions -- two orders of magnitude under the 0.244 pp noise floor.
+  #
+  #   The neighbour search is ~98.6% of the runtime and the vote 1.4%, so a
+  #   second pass would nearly double the cost to re-derive the same answer.
+  #
+  # It also removes a failure mode rather than merely saving time: voting the
+  # two levels independently let them disagree, and a disagreeing level-5 code
+  # had to be discarded. Under truncation the hierarchy holds by construction.
+  n_missing <- postings[is.na(cp2021_id_level_5), .N]
   .info("imputing ", n_missing, " rows without a vendor code ...")
   t0 <- proc.time()
-  pred <- skillviz::predict_cp4_knn(
-    postings[, list(general_id, idesco_level_4, cp2021_id_level_4, idsector)],
+  pred5 <- skillviz::predict_cp5_knn(
+    postings[, list(
+      general_id,
+      idesco_level_5,
+      cp2021_id_level_5,
+      idsector
+    )],
     skills,
+    restrictor = "idesco_level_5",
     k = cfg$k,
     sector_boost = cfg$sector_boost,
     max_train = cfg$max_train,
     dense_budget = cfg$dense_budget,
     # With IMPUTE_XGB on, the ESCO-less rows belong to xgboost, so the k-NN's
     # own rescue path is switched off to avoid two models claiming the same
-    # rows. Measured: k-NN 66.8% vs xgboost 77.5% CP3 there.
+    # rows. Measured at CP3: k-NN 66.8% vs xgboost 77.5% there.
     rescue_no_match = cfg$rescue && !cfg$xgb,
     rescue_k = cfg$rescue_k,
     rescue_max_train = cfg$rescue_max_train,
     verbose = TRUE
   )
   .info("imputation done in ", round((proc.time() - t0)[["elapsed"]], 1), "s")
-  if (nrow(pred)) {
-    mix <- pred[, .N, by = method][order(-N)]
+  if (nrow(pred5)) {
+    mix <- pred5[, .N, by = method][order(-N)]
     .info(
       "method mix: ",
       paste(sprintf("%s=%d", mix$method, mix$N), collapse = ", ")
     )
   }
+
+  # The level-4 prediction, by truncation.
+  pred_knn <- pred5[
+    !is.na(cp2021_id_level_5),
+    list(
+      general_id,
+      cp2021_id_level_5,
+      cp2021_id_level_4 = substring(cp2021_id_level_5, 1L, 7L)
+    )
+  ]
 
   # -- ESCO-less rows: xgboost, CP3 padded into the same column --
   pred_xgb <- NULL
@@ -846,7 +1125,7 @@ main <- function() {
   }
 
   # -- assemble and check --
-  out <- assemble(postings, pred, pred_xgb)
+  out <- assemble(postings, list(pred_knn, pred_xgb))
   if (d$mode == "incremental") {
     out <- out[year_grab_date * 100L + month_grab_date %in% d$months]
     reconcile(out, postings[ym %in% d$months])

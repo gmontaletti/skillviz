@@ -1,8 +1,12 @@
 # Containerised CP4 imputation
 
 Standalone job: reads OJA postings from the Postgres database, fills the missing
-CP2021 level-4 codes with `skillviz::predict_cp4_knn()`, and writes the result to
-the `staging` schema.
+CP2021 codes at levels 5 and 4, and writes the result to the `staging` schema.
+
+One `skillviz::predict_cp5_knn()` pass does the work — voting at level 5 with the
+candidate space restricted on `idesco_level_5`, with the level-4 code read off by
+truncation. Announcements carrying no ESCO code at any level cannot be restricted
+and go to a one-hot + xgboost model instead.
 
 Unlike the `skillviz_workflow` targets pipeline — which reads the local DuckDB
 store — this container talks to Postgres directly and is meant to run from cron.
@@ -17,45 +21,102 @@ store — this container talks to Postgres directly and is meant to run from cro
 | `year_grab_date`, `month_grab_date` | int | month key, indexed |
 | `cp2021_id_level_4` | text | the vendor's level-4 code where it exists, the imputed one otherwise |
 | `cp4_imputed` | smallint | `0` vendor-supplied, `1` algorithmic, `NULL` still unknown |
+| `cp2021_id_level_5` | text, nullable | level-5 code (unità professionale) |
+| `cp5_imputed` | smallint, nullable | `0` vendor-supplied, `1` algorithmic, `NULL` unavailable |
 
-`cp4_imputed` is `NULL` exactly when `cp2021_id_level_4` is `NULL`.
+`cp4_imputed` is `NULL` exactly when `cp2021_id_level_4` is `NULL`, and the same
+holds for the level-5 pair. `substring(cp2021_id_level_5, 1, 7)` always equals
+`cp2021_id_level_4` where both are present — asserted before every write.
 
-### One column, two precisions
+### One k-NN pass at level 5, level 4 by truncation
 
-A single column carries every code, but imputed values come from two models and
-are not equally precise:
+The coder votes once, at level 5, with the candidate space restricted on
+`idesco_level_5`. The level-4 code is then read off as
+`substring(pred, 1, 7)` rather than voted separately.
 
-| value shape | source | precision |
+Two measurements license that. Truncating the level-5 argmax reproduces the
+level-4 argmax to **+0.004 pp** contemporaneously and **+0.02 pp** walk-forward,
+changing 0.07% of predictions — two orders of magnitude under the 0.244 pp
+tie-break noise floor. And the neighbour search is ~98.6% of the runtime against
+the vote's 1.4%, so a second pass would nearly double the cost to re-derive the
+same answer.
+
+It also removes a failure mode rather than only saving time. When the two levels
+were voted independently they could disagree, and a level-5 code whose parent
+contradicted the level-4 column had to be discarded — 0.07% of rows then, and
+**12.2%** had the two levels also used different restrictors. Under truncation
+the hierarchy is a structural invariant, so a violation now aborts the run
+instead of silently dropping codes.
+
+### Why the restrictor is ESCO level 5
+
+Validated walk-forward over the last 6 months
+(`skillviz_workflow/run_cp5_restrictor_temporal.R`), training on every labelled
+month before each test month:
+
+| | ESCO level 5 | ESCO level 4 |
 |---|---|---|
-| `5.1.2.2` with `cp4_imputed = 0` | vendor | level 4 |
-| `5.1.2.2` with `cp4_imputed = 1` | k-NN, rows **with** an ESCO code | level 4 |
-| `5.1.2.0` with `cp4_imputed = 1` | xgboost, rows **without** an ESCO code | **level 3 only** |
+| level-5 accuracy, k-NN rows | **84.1%** | 80.0% |
+| level-4 accuracy, k-NN rows | **84.6%** | 80.3% |
+| paired gain | **+3.95 pp**, 6 months of 6 | — |
+| coverage cost | +0.04 pp | — |
+| calibration error (ECE) | **5.5 pp** | 6.3 pp |
+| wall-clock / peak RSS | **541s / 5.64 GB** | 772s / 6.41 GB |
 
-**A trailing `.0` means the code is only accurate to CP3.** The padding is
-unambiguous: of 510 real CP4 codes none ends in `.0`, and no padded CP3 collides
-with a real CP4, so `substring(code, 1, 5)` is always a valid CP3 and
-`code NOT LIKE '%.0'` selects the level-4-precise rows.
+Level 5 is not a trade: it is more accurate, better calibrated, faster and
+lighter. The gain is larger under walk-forward than contemporaneously (+3.95
+against +3.2), and it wins in every training-pool band including the thinnest.
+2,714 small groups do less dense similarity work than 399 large ones, which is
+why the finer restrictor is also the cheaper one.
+
+One caveat travels with all of it: every figure is measured labelled-on-labelled,
+and labelling is not random (see `?skillviz::build_esco_cp_crosswalk`). The gain
+is not established on the uncoded population the coder is applied to.
+
+### Confidence is on a new scale
+
+The level-5 vote spreads the same `k` neighbours over more classes than the old
+level-4 one, so a given confidence value does not mean what it used to. **Any
+downstream threshold must be re-derived, not inherited.** Calibration is reported
+per decile in `cp5_restrictor_temporal_results.rds`; expected calibration error
+is 5.5 pp, better than the 6.3 pp of the restrictor it replaced.
+
+### No padding, at either level
+
+Earlier versions of this job carried level-3-precise codes in the level-4 column,
+padded to `<cp3>.0`, because the ESCO-less segment could only be modelled at
+level 3. **That convention is gone.** Every model now predicts at level 5 and
+every level-4 code is the truncation of a level-5 one, so a level-4 code in this
+table is always a genuine level-4 code. The job asserts it: a value ending in
+`.0` in `cp2021_id_level_4` aborts the run, since none of the 510 real level-4
+codes ends that way.
+
+The same test must never be applied to `cp2021_id_level_5`, where **340 of the
+813 real codes do end in `.0`** — CP2021 writes an unsubdivided level-4 category
+as `<cp4>.0`.
 
 ### Which model handles which rows
 
-Each segment gets the model that wins on it, measured on 60,002 held-out rows at
-CP3 level:
+Each segment gets the model that wins on it:
 
-| rows | model | accuracy | incumbent |
+| rows | model | level-5 accuracy | level-3 accuracy |
 |---|---|---|---|
-| **with** `idesco_level_4` | k-NN (`predict_cp4_knn`) | **88.3%** | xgboost 85.0% |
-| **without** `idesco_level_4` | vtreat + xgboost | **77.5%** | k-NN 66.8% |
+| **with** an ESCO code | k-NN (`predict_cp5_knn`, restricted on `idesco_level_5`) | **84.1%** | — |
+| **without** one (~13%) | one-hot + xgboost | **76.4%** | 80.8% |
 
-Where an ESCO code exists, restricting candidates to the CP4 codes observed for
-that exact ESCO L4 beats impact-coded ESCO. Where none exists, that restriction
-is unavailable and the covariates the k-NN ignores — city, sector, source,
-contract, education, salary — win instead. The xgboost path is also the only one
-that can classify a posting with **no skills at all** (81.5% vs 69.7%).
+The k-NN figure is walk-forward over 6 months; the xgboost figure is a 3-month
+temporal holdout on the 42,530 labelled ESCO-less rows.
 
-The model is refitted from scratch on each full run; there is no artefact to
-manage. CP3 codes with fewer than `IMPUTE_XGB_RARE_MIN` labelled examples are
-folded into an `other` bucket and those rows are left unimputed rather than
-guessed.
+Where an ESCO code exists, restricting candidates to the codes observed for that
+exact occupation beats anything the covariates can do. Where none exists that
+restriction is unavailable, and the covariates the k-NN ignores — city, sector,
+source, contract, education, salary — win instead. The xgboost path is also the
+only one that can classify a posting with **no skills at all** (81.5% vs 69.7%).
+
+Neither model keeps an artefact: both are refitted from scratch on each full run.
+Level-5 codes with fewer than `IMPUTE_XGB_RARE_MIN` labelled examples are folded
+into an `other` bucket, and rows predicted into it are left unimputed rather than
+guessed into a common class.
 
 A vendor code is never overwritten. The job asserts this before committing and
 aborts if it ever finds otherwise.
@@ -92,6 +153,20 @@ docker build -f container/Dockerfile -t skillviz-impute:latest .
 
 The build context is the package root, so the package-root `.dockerignore`
 applies — it excludes `container/.Renviron` and every other credential file.
+
+## Test
+
+`assemble()` and `reconcile()` decide what reaches the live table, so they have
+an offline test that needs no database:
+
+```sh
+Rscript container/test_impute_cp4.R
+```
+
+It loads the script's definitions without running `main()` and drives synthetic
+postings through every row class: vendor-coded, k-NN-imputed at both levels,
+k-NN levels disagreeing, xgboost `.0`-padded, and unresolved. It also asserts
+that a hierarchy break and a malformed level-5 code are both fatal.
 
 ## Run
 
@@ -168,6 +243,8 @@ which — the value's shape does:
 
 - **k-NN, ESCO rows**, level-4 precise: **~86% CP4 / ~88% CP3**
 - **xgboost, ESCO-less rows**, `.0`-padded, level-3 only: **~77.5% CP3**
+- **k-NN, ESCO rows, level 5** (`IMPUTE_CP5=1`): **~86% CP5**, on the ~87% of
+  rows that get one at all
 
 Filter on `cp2021_id_level_4 NOT LIKE '%.0'` for the level-4-precise subset. Rows
 whose predicted CP3 falls in the folded `other` bucket are left `NULL` rather
