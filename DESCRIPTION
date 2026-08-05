@@ -1,6 +1,6 @@
 Package: skillviz
 Title: Skill Co-Occurrence Analysis and Visualization from Online Job Advertisements
-Version: 0.4.0
+Version: 0.4.1
 Authors@R:
     person("Giampaolo", "Montaletti", , "giampaolo.montaletti@gmail.com",
            role = c("aut", "cre"),

@@ -66,7 +66,7 @@ To cite skillviz in publications, use:
 
 ```
 Montaletti G (2026). skillviz: Skill Co-Occurrence Analysis and Visualization
-from Online Job Advertisements. R package version 0.2.0.
+from Online Job Advertisements. R package version 0.4.1.
 https://github.com/gmontaletti/skillviz
 ```
 
@@ -77,7 +77,7 @@ A BibTeX entry:
   title = {skillviz: Skill Co-Occurrence Analysis and Visualization from Online Job Advertisements},
   author = {Giampaolo Montaletti},
   year = {2026},
-  note = {R package version 0.2.0},
+  note = {R package version 0.4.1},
   url = {https://github.com/gmontaletti/skillviz},
 }
 ```
