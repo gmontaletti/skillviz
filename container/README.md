@@ -11,6 +11,11 @@ and go to a one-hot + xgboost model instead.
 Unlike the `skillviz_workflow` targets pipeline — which reads the local DuckDB
 store — this container talks to Postgres directly and is meant to run from cron.
 
+**Before using the imputed codes in an analysis, read [LIMITI.md](LIMITI.md)**
+(in Italian): what these procedures do not guarantee, with the measurements that
+quantify each limit. The most important one is that no validation covers the
+population the coder is actually applied to.
+
 ## What it writes
 
 `staging.gm_cp4_imputed`, one row per deduplicated posting:
