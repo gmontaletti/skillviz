@@ -1,13 +1,30 @@
 # Changelog
 
+## skillviz 0.4.1
+
+- Nuovo documento `container/LIMITI.md`: riferimento per chi consuma
+  `staging.gm_cp4_imputed`, con ciò che le procedure **non**
+  garantiscono e la misura che quantifica ciascun limite. Il primo è
+  quello che condiziona tutti gli altri — nessuna validazione riguarda
+  la popolazione effettivamente trattata, perché ogni accuratezza è
+  misurata su annunci già codificati dal fornitore e applicata a quelli
+  che non lo sono.
+
+- Corretta la voce di changelog della 0.4.0, che descriveva uno stato
+  mai rilasciato: riportava il restrittore di livello 5 come non
+  predefinito e la validazione walk-forward come non superata, mentre la
+  versione pubblicata contiene il criterio corretto, il gate superato e
+  il default già invertito.
+
 ## skillviz 0.4.0
 
 ### Restrittore ESCO di livello 5
 
 - [`predict_cp5_knn()`](https://gmontaletti.github.io/skillviz/reference/predict_cp5_knn.md)
   accetta ora `restrictor`, che sceglie la colonna ESCO su cui si
-  restringe lo spazio dei candidati: `"idesco_level_4"` (predefinito,
-  comportamento invariato) oppure `"idesco_level_5"`.
+  restringe lo spazio dei candidati. **Il valore predefinito è
+  `"idesco_level_5"`**; `"idesco_level_4"` resta disponibile e riproduce
+  il comportamento precedente.
 
 - Il livello 5 è un restrittore nettamente migliore: 2.714 gruppi contro
   399, in media 23,9 candidati CP5 per gruppo contro 65,8, e
@@ -18,26 +35,27 @@
   etichettate e perde solo nella più sottile (66,0% contro 73,1% fra 1 e
   10 righe).
 
-- **Non è il valore predefinito, e non lo diventa: la validazione
-  walk-forward richiesta dalla regola fissata in precedenza è stata
-  eseguita e non è stata superata.** Nel merito il restrittore si è
-  comportato meglio che nella misura contemporanea — CP5 **+3,95 punti**
-  appaiati, positivo in **6 mesi su 6** (da +3,61 a +4,54), copertura
-  −0,042 punti, guadagno positivo in tutte le fasce di ampiezza del pool
-  compresa la più sottile — ma un criterio secondario, la monotonia
-  della confidenza sui decili, richiedeva 5 mesi su 6 e ne ha ottenuti
-  4.
+- È diventato predefinito dopo la validazione walk-forward richiesta
+  dalla regola fissata in precedenza: allenando su ogni mese etichettato
+  precedente a quello di test, CP5 **+3,95 punti** appaiati e positivo
+  in **6 mesi su 6** (da +3,61 a +4,54), CP4 +3,81, copertura −0,042
+  punti, guadagno positivo in tutte le fasce di ampiezza del pool
+  compresa la più sottile. È anche meglio calibrato del restrittore che
+  sostituisce (errore di calibrazione atteso 5,5 punti contro 6,3) e più
+  economico: 541 s contro 772 s, 5,64 GB di picco contro 6,41.
 
-- Quel criterio è mal specificato: boccia il livello 4 in carica più
-  severamente (3 mesi su 6) di quanto bocci il livello 5, e ogni
-  violazione cade in un decile la cui confidenza media è esattamente
-  100%, cioè dentro il blocco di pari merito che copre il 60% delle
-  righe. Limitandosi ai decili in cui la confidenza varia davvero,
-  entrambi i restrittori sono monotòni in 6 mesi su 6. Il criterio era
-  però stabilito in anticipo, quindi l’esito resta negativo: ridefinire
-  una soglia dopo averne visto il risultato è esattamente ciò che la
-  registrazione preventiva serve a impedire. Chi riprenderà il tema deve
-  correggere il criterio **prima** di rieseguire la validazione.
+- La prima esecuzione del gate era fallita su un criterio secondario —
+  monotonia della confidenza sui decili, 4 mesi su 6 anziché 5 — e in
+  quell’occasione il restrittore **non** era stato adottato. Il criterio
+  si è poi rivelato difettoso e non semplicemente scomodo: bocciava il
+  livello 4 in carica più severamente (3 mesi su 6), perché i decili dal
+  quinto al decimo stanno tutti a confidenza esattamente 100%, un unico
+  blocco di pari merito che copre il 60% delle righe dove non esiste
+  alcun ordinamento da verificare. È stato sostituito, **prima** di
+  rieseguire, da due criteri comparativi: errore di calibrazione
+  relativo al livello 4 con margine di 1,0 punti, e monotonia limitata
+  ai decili in cui la confidenza varia davvero. Sul gate corretto il
+  livello 5 supera ogni criterio.
 
 - Restano valide due avvertenze indipendenti dall’esito: tutte le misure
   confrontano righe etichettate con righe etichettate, mentre gli
@@ -106,6 +124,47 @@
   100, sia in campione sia fuori campione nel tempo: **perde** fra 0,3 e
   3,0 punti e non migliora mai la copertura, perché si limita a spostare
   righe fra i due rami.
+
+### Container: una sola passata, nessun riempimento
+
+- Il container esegue ora **una sola** passata k-NN, a livello 5, e
+  ricava il livello 4 per troncamento invece di votarlo separatamente.
+  Il troncamento riproduce il voto diretto entro 0,004 punti in misura
+  contemporanea e 0,02 walk-forward, mentre la ricerca dei vicini è il
+  98,6% del tempo di esecuzione: una seconda passata raddoppierebbe il
+  costo per riottenere la stessa risposta. Elimina anche un modo di
+  fallire — votando i due livelli separatamente potevano discordare, e
+  un codice di livello 5 in contrasto con la colonna di livello 4 andava
+  scartato. Sotto troncamento la gerarchia è un invariante strutturale e
+  una violazione interrompe l’esecuzione.
+
+- **La convenzione del `.0` è stata rimossa.** Le versioni precedenti
+  registravano codici precisi al livello 3 nella colonna di livello 4,
+  riempiti a `<cp3>.0`, perché il segmento privo di ESCO era modellabile
+  solo a livello 3. Ora ogni modello predice a livello 5, quindi un
+  codice di livello 4 nella tabella è sempre un codice di livello 4
+  autentico. Chi selezionava le righe precise con `code NOT LIKE '%.0'`
+  non ne ha più bisogno.
+
+- Il percorso per gli annunci privi di codice ESCO predice ora a livello
+  5 (76,4%, contro l’84,1% del k-NN dove l’ESCO c’è). Il presupposto che
+  lo dichiarava impraticabile era doppiamente sbagliato: le classi
+  effettive sono 102 dopo l’accorpamento delle rare, non centinaia, e il
+  costo proibitivo veniva dalla codifica, non dal livello.
+
+- **`vtreat` è stato rimosso, non aggirato.** Su una ripartizione
+  temporale di tre mesi sui 42.530 annunci etichettati privi di ESCO,
+  l’impact coding è insieme più lento e meno accurato di un semplice
+  one-hot: a livello 3, 736 s e 80,09% contro 21 s e 81,34%; a livello
+  5, 2.953 s e 75,44% contro 35 s e 76,36%. Costruisce una matrice densa
+  la cui larghezza cresce col numero di classi — la ragione per cui il
+  livello fine era ritenuto impossibile su quel segmento — mentre il
+  one-hot resta sparso e costa le stesse 1.531 colonne con 56 classi o
+  con 102.
+
+- Rimosse le variabili `IMPUTE_CP5` e `IMPUTE_XGB_PERIOD_A_END`. Il
+  livello 5 non è più un’aggiunta opzionale ma il modello, e la ricetta
+  vtreat che la seconda governava non esiste più.
 
 ## skillviz 0.3.0
 
