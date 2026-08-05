@@ -20,9 +20,14 @@ taxonomies.
 ``` r
 
 devtools::document()    # generate NAMESPACE and man/ from roxygen2
-devtools::check()       # R CMD check
 devtools::test()        # run testthat suite
 devtools::install()     # install locally
+
+# R CMD check, with the SAME arguments as CI. A plain devtools::check() is
+# weaker than the workflow: r-lib/actions/check-r-package@v2 defaults to
+# rcmdcheck(args = c("--no-manual", "--as-cran"), error_on = "warning"), so
+# those flags are NOT in R-CMD-check.yaml -- they come from the action.
+devtools::check(args = c("--no-manual", "--as-cran"))
 ```
 
 ## Git Operations section

@@ -44,9 +44,14 @@
 <h2 id="build-and-test">Build and Test<a class="anchor" aria-label="anchor" href="#build-and-test"></a></h2>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">document</span><span class="op">(</span><span class="op">)</span>    <span class="co"># generate NAMESPACE and man/ from roxygen2</span></span>
-<span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">check</span><span class="op">(</span><span class="op">)</span>       <span class="co"># R CMD check</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">test</span><span class="op">(</span><span class="op">)</span>        <span class="co"># run testthat suite</span></span>
-<span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install</span><span class="op">(</span><span class="op">)</span>     <span class="co"># install locally</span></span></code></pre></div>
+<span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install</span><span class="op">(</span><span class="op">)</span>     <span class="co"># install locally</span></span>
+<span></span>
+<span><span class="co"># R CMD check, with the SAME arguments as CI. A plain devtools::check() is</span></span>
+<span><span class="co"># weaker than the workflow: r-lib/actions/check-r-package@v2 defaults to</span></span>
+<span><span class="co"># rcmdcheck(args = c("--no-manual", "--as-cran"), error_on = "warning"), so</span></span>
+<span><span class="co"># those flags are NOT in R-CMD-check.yaml -- they come from the action.</span></span>
+<span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">check</span><span class="op">(</span>args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"--no-manual"</span>, <span class="st">"--as-cran"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="git-operations-section">Git Operations section<a class="anchor" aria-label="anchor" href="#git-operations-section"></a></h2>
