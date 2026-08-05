@@ -39,8 +39,22 @@
 .warn <- function(...) .log("WARN", ...)
 .err <- function(...) .log("ERROR", ...)
 
+# on.exit() does NOT run under Rscript -- not on quit(), not even at the end of
+# a script -- so the lock has to be released explicitly on every exit path.
+# LOCK_HELD arms it only once this run actually owns the lock, so the "another
+# run holds it" path cannot delete someone else's.
+LOCK_HELD <- FALSE
+
+.release_lock <- function() {
+  if (isTRUE(LOCK_HELD) && exists("lock_file") && file.exists(lock_file)) {
+    try(file.remove(lock_file), silent = TRUE)
+  }
+  invisible(NULL)
+}
+
 .die <- function(status, ...) {
   .err(...)
+  .release_lock()
   quit(status = status, save = "no")
 }
 
@@ -179,22 +193,37 @@ lock_file <- file.path(cfg$lock_dir, "impute_cp4.lock")
 if (!dir.exists(cfg$lock_dir)) {
   dir.create(cfg$lock_dir, recursive = TRUE, showWarnings = FALSE)
 }
+# Staleness is decided by AGE, not by whether the recorded PID is alive. Inside
+# a container the entrypoint is always PID 1, so `ps -p 1` succeeds in every
+# run and a leftover lock would look alive for ever -- blocking the job
+# permanently after any crash. Concurrency is really guarded by `docker run
+# --name`, which fails immediately on a second start; this file is the
+# belt-and-braces, and a TTL is the only staleness signal that means anything
+# here.
+lock_ttl_s <- getenv_int("IMPUTE_LOCK_TTL_HOURS", 6L) * 3600L
 if (file.exists(lock_file)) {
-  prev <- suppressWarnings(readLines(lock_file, warn = FALSE)[1])
-  alive <- !is.na(prev) &&
-    nzchar(prev) &&
-    length(suppressWarnings(
-      system2("ps", c("-p", prev), stdout = TRUE, stderr = FALSE)
-    )) >=
-      2
-  if (isTRUE(alive)) {
-    .die(3L, "another run holds the lock (pid ", prev, "): ", lock_file)
+  age_s <- as.numeric(
+    difftime(Sys.time(), file.mtime(lock_file), units = "secs")
+  )
+  if (age_s < lock_ttl_s) {
+    .die(
+      3L,
+      "another run holds the lock (age ",
+      round(age_s / 60),
+      " min, TTL ",
+      round(lock_ttl_s / 3600),
+      "h): ",
+      lock_file
+    )
   }
-  .warn("removing stale lock from pid ", prev)
+  .warn("removing stale lock, age ", round(age_s / 3600, 1), "h")
   file.remove(lock_file)
 }
-writeLines(as.character(Sys.getpid()), lock_file)
-on.exit(try(file.remove(lock_file), silent = TRUE), add = TRUE)
+writeLines(
+  paste0(Sys.getpid(), " ", format(Sys.time(), "%Y-%m-%d %H:%M:%S")),
+  lock_file
+)
+LOCK_HELD <- TRUE
 
 # 5. Connection -----
 
@@ -747,17 +776,30 @@ table_exists <- function(con, schema, table) {
 }
 
 # Index and constraint names are global to the schema, and ALTER TABLE ...
-# RENAME does not rename them. Naming them after the staging table therefore
-# leaves "<table>_new_pkey" attached to the live table, and the next build
-# collides with it. Build with a run-unique suffix instead, then rename to the
-# canonical names inside the swap transaction, once the old table -- and with
-# it the old names -- has been dropped.
+# RENAME does not rename them. So the names carry a per-run suffix and KEEP it:
+# they are never renamed to a canonical form.
+#
+# An earlier version did rename them, on the reasoning that dropping the live
+# table frees its names. That reasoning has a hole, and production found it: the
+# live table had been renamed to gm_cp4_imputed_old as a manual backup before a
+# model change, so it was never dropped, and it still owned the index named
+# gm_cp4_imputed_pkey. The swap wrote 1.66M rows, renamed the staging table into
+# place, then failed on "relation gm_cp4_imputed_pkey already exists" and rolled
+# the whole thing back -- leaving NO live table at all. Any relation in the
+# schema holding the canonical name reproduces this, and a backup made with
+# RENAME always holds it.
+#
+# Nothing references these names, so keeping the suffix costs nothing. The
+# primary key works whatever it is called.
+#
+# The suffix must be genuinely unique. Sys.getpid() is not: inside a container
+# the entrypoint is PID 1, so every run produced "..._pkey_1". The lock file has
+# so far prevented two runs from colliding on it, but a leftover staging table
+# would collide at add_constraints() time, before the transaction.
 build_names <- function(table, suffix) {
   list(
     pkey = paste0(table, "_pkey_", suffix),
-    ym = paste0("idx_", table, "_ym_", suffix),
-    pkey_final = paste0(table, "_pkey"),
-    ym_final = paste0("idx_", table, "_ym")
+    ym = paste0("idx_", table, "_ym_", suffix)
   )
 }
 
@@ -789,7 +831,7 @@ write_full <- function(con, out, schema, table) {
   if (table_exists(con, schema, staging_tbl)) {
     DBI::dbRemoveTable(con, target_id(schema, staging_tbl))
   }
-  nm <- build_names(table, Sys.getpid())
+  nm <- build_names(table, format(Sys.time(), "%Y%m%d%H%M%S"))
   .info("writing ", nrow(out), " rows to ", schema, ".", staging_tbl)
   DBI::dbWriteTable(con, target_id(schema, staging_tbl), out, overwrite = TRUE)
   add_constraints(con, schema, staging_tbl, nm)
@@ -810,26 +852,9 @@ write_full <- function(con, out, schema, table) {
           qi(con, table)
         )
       )
-      # The old table is gone, so its constraint and index names are free.
-      DBI::dbExecute(
-        con,
-        sprintf(
-          "ALTER TABLE %s.%s RENAME CONSTRAINT %s TO %s",
-          s,
-          qi(con, table),
-          qi(con, nm$pkey),
-          qi(con, nm$pkey_final)
-        )
-      )
-      DBI::dbExecute(
-        con,
-        sprintf(
-          "ALTER INDEX %s.%s RENAME TO %s",
-          s,
-          qi(con, nm$ym),
-          qi(con, nm$ym_final)
-        )
-      )
+      # No rename to canonical names: see build_names(). The suffixed names
+      # stay, and the swap is now two statements that cannot collide with
+      # anything else in the schema.
       DBI::dbCommit(con)
       TRUE
     },
@@ -1178,10 +1203,12 @@ if (!interactive()) {
   tryCatch(
     {
       main()
+      .release_lock()
       quit(status = 0L, save = "no")
     },
     error = function(e) {
       .err(conditionMessage(e))
+      .release_lock()
       quit(status = 1L, save = "no")
     }
   )

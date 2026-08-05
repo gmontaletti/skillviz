@@ -20,8 +20,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     RENV_CONFIG_REPOS_OVERRIDE=https://packagemanager.posit.co/cran/__linux__/noble/2026-01-15
 
 # 2. System dependencies ------------------------------------------------------
-# libpq5: RPostgres client library. procps: `ps`, used by the lock file for
-# stale-PID detection. git: remotes needs it to resolve the Remotes: field.
+# libpq5: RPostgres client library. procps: `ps`, kept for debugging only --
+# the lock no longer consults it, because PID 1 in a container makes liveness
+# meaningless. git: remotes needs it to resolve the Remotes: field.
 # libglpk40 / libxml2 / libgmp10: igraph's binary links against all three and
 # fails to LOAD without them -- skillviz Imports igraph, so the package cannot
 # be attached at all. The build's load-check catches this rather than cron.
