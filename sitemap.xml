@@ -10,6 +10,7 @@
 <url><loc>https://gmontaletti.github.io/skillviz/index.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/news/index.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_cpi_esco_crosswalk.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/build_esco_cp_crosswalk.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_profession_skill_profile.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_skill_prof_sparse.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_skillist.html</loc></url>
@@ -51,6 +52,7 @@
 <url><loc>https://gmontaletti.github.io/skillviz/reference/plot_cooc_graph.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/plot_skill_ranking.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/predict_cp4_knn.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/predict_cp5_knn.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/prepare_annunci_esco.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/prepare_annunci_geography.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/prepare_source_tsibble.html</loc></url>
