@@ -216,10 +216,66 @@ sorgente è corretto; una nuova corsa li rimisurerebbe.
 - distanze geometriche: tutte sotto i naive Bayes di ~5 pp;
 - ponderazione Balassa: la peggiore delle dodici misure.
 
-**Aperto e non misurato:** il centroide non è mai stato provato sul segmento
-privo di codice ESCO, dove oggi lavora xgboost con codifica one-hot. Lì il
-vincolo non è il tempo ma l'assenza di un restrittore, quindi il confronto
-sarebbe di natura diversa.
+**Chiuso il 2026-08-07: il centroide sul segmento privo di ESCO.** Vedi la
+sezione 8.
+
+---
+
+## 8. Il segmento privo di ESCO: asse chiuso
+
+Misurato da `skillviz_workflow/run_cp5_no_esco_matrix.R` il 2026-08-07, sulle
+4.496 righe di test del segmento (ultimi 3 mesi), contro l'incumbent one-hot +
+xgboost.
+
+L'idea era che il centroide rendesse praticabile ciò che il k-NN globale non era:
+per gli annunci senza codice ESCO non esiste un restrittore, quindi si sarebbe
+usata **tutta la matrice** — un gruppo unico con tutti i codici candidati. Il
+k-NN globale era stato abbandonato perché costava il 92% del tempo di
+esecuzione; il centroide fa lo stesso lavoro in 3 secondi.
+
+Motivava il tentativo un fatto misurato: gli annunci senza ESCO **non** sono
+poveri di competenze, ne portano nel 94,20% dei casi contro il 94,12% di quelli
+classificati.
+
+| Braccio | CP5 | Copertura | Δ | Tempo |
+|---|---|---|---|---|
+| `xgb_onehot` (incumbent) | **75,67%** | 96,4% | — | 38,6 s |
+| centroide, addestrato sul solo segmento | 68,28% | 100% | −7,4 pp | 0,2 s |
+| centroide, tutta la matrice + settore | 61,30% | 100% | −14,4 pp | 3,0 s |
+| centroide, tutta la matrice | 58,47% | 100% | −17,2 pp | 3,1 s |
+
+**L'esito è negativo e il segno è opposto all'ipotesi.** Allargare
+l'addestramento da 38.000 righe del segmento a 765.000 di tutta la finestra —
+diciotto volte più dati — costa **9 punti** invece di guadagnarne.
+
+Due meccanismi, entrambi coerenti con i numeri:
+
+- **Le classi in più sono rumore, non copertura.** La matrice intera ha 498
+  codici CP5, il segmento ne mostra 270. Le 228 in eccesso non sono codici a cui
+  quegli annunci appartengono e che l'incumbent non può proporre: sono massa di
+  probabilità dirottata verso classi che su questa popolazione non ricorrono. Il
+  termine di settore ne recupera 2,8 punti, il che colloca il problema nella
+  composizione della popolazione e non nel segnale delle competenze.
+- **Le righe senza ESCO sono senza ESCO per una ragione.** Addestrare
+  prevalentemente su annunci che il fornitore *è riuscito* a classificare
+  significa apprendere la relazione competenze → codice su una popolazione
+  diversa da quella su cui si applica. La copertura di competenze identica
+  faceva sperare in uno scarto piccolo: non lo è.
+
+**Perché il centroide vince altrove e perde qui.** Sul segmento con ESCO il
+restrittore riduce lo spazio a circa 9 candidati, e le competenze bastano a
+separarli. Senza restrittore i candidati sono 270–498 e le sole competenze non
+bastano: servono le covariate — città, settore, fonte, contratto, istruzione,
+salario — che il centroide non usa e xgboost sì. Non è un modello peggiore, sta
+giocando con meno informazione.
+
+La copertura al 100% dei bracci a centroidi contro il 96,4% dell'incumbent non
+compensa: xgboost lascia scoperto il 3,6% perché rifiuta di indovinare le classi
+rare, ed è una scelta deliberata.
+
+**Non riprovare questo asse.** Se si vuole migliorare la codifica di quel 13% di
+annunci, la leva promettente è il **testo dell'annuncio**, che oggi nessun
+modello del progetto usa.
 
 ---
 
@@ -230,5 +286,6 @@ sarebbe di natura diversa.
 | Risultati completi della corsa | `skillviz_workflow/cp5_centroid_results.rds` |
 | Selezione congelata | `skillviz_workflow/cp5_centroid_selection.rds` |
 | Harness, con gate e diagnosi in intestazione | `skillviz_workflow/run_cp5_centroid.R` |
+| Segmento privo di ESCO: harness e risultati | `skillviz_workflow/run_cp5_no_esco_matrix.R`, `cp5_no_esco_matrix_results.rds` |
 | API delle due funzioni | `?skillviz::build_cp_profiles`, `?skillviz::predict_cp5_centroid` |
 | Il modello in esercizio, con cui è stato confrontato | `?skillviz::predict_cp5_knn` |
