@@ -32,10 +32,14 @@ Build crosswalk tables between CPI, ESCO, and CP2021 classifications.
   : Classify unmapped ESCO L4 codes to CPI groups via Naive Bayes
 - [`build_esco_cp_crosswalk()`](https://gmontaletti.github.io/skillviz/reference/build_esco_cp_crosswalk.md)
   : Build a full ESCO-to-CP2021 crosswalk with its candidate structure
+- [`build_cp_profiles()`](https://gmontaletti.github.io/skillviz/reference/build_cp_profiles.md)
+  : Build skill profiles per occupation-code pair
 - [`predict_cp4_knn()`](https://gmontaletti.github.io/skillviz/reference/predict_cp4_knn.md)
   : Predict CP2021 level-4 codes via sector-boosted Jaccard k-NN
 - [`predict_cp5_knn()`](https://gmontaletti.github.io/skillviz/reference/predict_cp5_knn.md)
   : Predict CP2021 level-5 codes via sector-boosted Jaccard k-NN
+- [`predict_cp5_centroid()`](https://gmontaletti.github.io/skillviz/reference/predict_cp5_centroid.md)
+  : Predict CP2021 codes against static skill profiles
 
 ## Skill Relevance Analysis
 
