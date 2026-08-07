@@ -39,8 +39,10 @@ reference:
       - prepare_annunci_geography
       - classify_esco_to_cpi
       - build_esco_cp_crosswalk
+      - build_cp_profiles
       - predict_cp4_knn
       - predict_cp5_knn
+      - predict_cp5_centroid
 
   - title: Skill Relevance Analysis
     desc: Compute specialization indices, TF-IDF diffusion scores, and skill classification.

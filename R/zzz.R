@@ -6,6 +6,14 @@
 NULL
 
 utils::globalVariables(c(
+  # build_cp_profiles() / predict_cp5_centroid() internals
+  "grp_id",
+  "n_c",
+  "pair_id",
+  "row_id",
+  "sect",
+  "sect_id",
+  "sid",
   # build_esco_cp_crosswalk() internals
   "code_modal",
   "code_modal_rw",
