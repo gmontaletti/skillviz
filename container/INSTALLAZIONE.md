@@ -20,8 +20,8 @@ job produce e con quali limiti, vedere [README.md](README.md) e
 | Accesso di rete | al Postgres OJA, porta 5432, TLS |
 | Credenziali Postgres | utente con lettura su `public` e scrittura su `staging` |
 
-Sulla memoria: l'esecuzione sulla finestra di 24 mesi ha un picco misurato di
-**5,64 GB**. Un container da 7,75 GB era già stato terminato dal kernel (uscita
+Sulla memoria: su una finestra di 24 mesi il picco misurato è **5,64 GB**, e la
+finestra di produzione è di 36. Un container da 7,75 GB era già stato terminato dal kernel (uscita
 137) quando `IMPUTE_DENSE_BUDGET` era lasciato al valore predefinito del
 pacchetto; il file d'ambiente lo imposta a 2.5e7 proprio per questo. Non
 abbassare quel margine senza rimisurare.
@@ -96,7 +96,9 @@ docker run --rm \
   skillviz-impute:latest
 ```
 
-Attendersi circa **20 minuti** sulla finestra di 24 mesi. Nel log devono
+Attendersi **circa un'ora** sulla finestra di 36 mesi. La prima esecuzione
+reale in produzione ne ha impiegati 42 su 24 mesi — k-NN 1.900 s, xgboost 543 s
+— e il costo cresce con la finestra. Nel log devono
 comparire: il numero di annunci letti, la normalizzazione dei codici
 `Unclassifiable`, il mix dei metodi del k-NN, il percorso xgboost, e infine
 `IMPUTE_DRY_RUN set — nothing written`.

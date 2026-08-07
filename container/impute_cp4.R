@@ -142,7 +142,10 @@ pg_params <- function() {
 cfg <- list(
   schema = getenv_default("IMPUTE_TARGET_SCHEMA", "staging"),
   table = getenv_default("IMPUTE_TARGET_TABLE", "gm_cp4_imputed"),
-  window_months = getenv_int("IMPUTE_WINDOW_MONTHS", 24L),
+  # The window IS the table: a full rebuild replaces the target with exactly
+  # these months, so a default shorter than production would silently drop the
+  # rest. 36 matches the deployed value.
+  window_months = getenv_int("IMPUTE_WINDOW_MONTHS", 36L),
   max_incremental = getenv_int("IMPUTE_MAX_INCREMENTAL", 3L),
   k = getenv_int("IMPUTE_K", 7L),
   sector_boost = as.numeric(getenv_default("IMPUTE_SECTOR_BOOST", "5")),
