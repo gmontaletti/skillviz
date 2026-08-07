@@ -460,6 +460,19 @@ build_cp_profiles <- function(
 #' p <- build_cp_profiles(postings, skills, verbose = FALSE)
 #' predict_cp5_centroid(p, postings, skills, verbose = FALSE)
 #'
+#' **Not adopted in production.** Measured against [predict_cp5_knn()] on a
+#' sealed 3-month block it scores 84.13% against 83.92% on the rows both decide
+#' -- equivalent, since the difference is under this project's 0.244 pp noise
+#' floor -- with identical coverage and 16x faster coding (7.3s against 118.7s,
+#' plus a 2.4s build). The pre-registered gate nonetheless failed, on memory
+#' alone: 0.531x against a 0.50x threshold. Nothing in the pipeline or the
+#' container calls this function.
+#'
+#' The full record -- flow, measured optima for every hyper-parameter, the gate,
+#' what the experiment settles about the 2026-03 attempt, and what a
+#' re-specification would have to decide first -- is in
+#' `reference/skillviz/centroide.md` (in Italian).
+#'
 #' @seealso [build_cp_profiles()], [predict_cp5_knn()]
 #' @export
 predict_cp5_centroid <- function(
