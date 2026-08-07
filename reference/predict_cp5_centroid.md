@@ -100,33 +100,3 @@ comparable.
 
 [`build_cp_profiles()`](https://gmontaletti.github.io/skillviz/reference/build_cp_profiles.md),
 [`predict_cp5_knn()`](https://gmontaletti.github.io/skillviz/reference/predict_cp5_knn.md)
-
-## Examples
-
-``` r
-postings <- data.table::data.table(
-  general_id = as.character(1:6),
-  idesco_level_5 = rep(c("1000.1", "2000.1"), each = 3),
-  cp2021_id_level_5 = c(
-    "1.1.1.1.1", "1.1.1.1.1", "1.1.1.1.2",
-    "2.2.2.2.0", "2.2.2.2.0", "2.2.2.2.0"
-  )
-)
-skills <- data.table::data.table(
-  general_id = as.character(rep(1:6, each = 2)),
-  escoskill_level_3 = c(
-    "s1", "s2", "s1", "s2", "s1", "s3",
-    "s4", "s5", "s4", "s5", "s4", "s6"
-  )
-)
-p <- build_cp_profiles(postings, skills, verbose = FALSE)
-predict_cp5_centroid(p, postings, skills, verbose = FALSE)
-#>    general_id cp2021_id_level_5 confidence           method
-#>        <char>            <char>      <num>           <char>
-#> 1:          1         1.1.1.1.1  0.6685342         centroid
-#> 2:          2         1.1.1.1.1  0.6685342         centroid
-#> 3:          3         1.1.1.1.1  0.6630519         centroid
-#> 4:          4         2.2.2.2.0  1.0000000 single_candidate
-#> 5:          5         2.2.2.2.0  1.0000000 single_candidate
-#> 6:          6         2.2.2.2.0  1.0000000 single_candidate
-```
