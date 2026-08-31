@@ -287,5 +287,6 @@ modello del progetto usa.
 | Selezione congelata | `skillviz_workflow/cp5_centroid_selection.rds` |
 | Harness, con gate e diagnosi in intestazione | `skillviz_workflow/run_cp5_centroid.R` |
 | Segmento privo di ESCO: harness e risultati | `skillviz_workflow/run_cp5_no_esco_matrix.R`, `cp5_no_esco_matrix_results.rds` |
+| Guida didattica al metodo, per chi lavora su database | `reference/skillviz/centroide-guida.md` |
 | API delle due funzioni | `?skillviz::build_cp_profiles`, `?skillviz::predict_cp5_centroid` |
 | Il modello in esercizio, con cui è stato confrontato | `?skillviz::predict_cp5_knn` |
