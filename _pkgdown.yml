@@ -95,6 +95,41 @@ reference:
       - compute_skill_ranking_series
       - compute_skill_variation
 
+  - title: Emerging Skills
+    desc: Share panels, drift-net trends, onset, diffusion, taxonomy drift and the emergence score.
+    contents:
+      - compute_share_panel
+      - compute_share_trend
+      - compute_yoy_ratio
+      - compute_share_acceleration
+      - detect_skill_onset
+      - compute_rca_panel
+      - compute_diffusion_panel
+      - compute_drift_index
+      - detect_taxonomy_drift
+      - calibrate_min_support
+      - score_emergence
+      - backtest_emergence
+
+  - title: Changing and Emerging Professions
+    desc: Profile turnover, decomposition by skill groups, breadth of change and emerging professions.
+    contents:
+      - build_profile_pair
+      - compute_profile_turnover
+      - decompose_profile_change
+      - compute_turnover_null
+      - compute_change_breadth
+      - compute_emerging_uptake
+      - classify_emerging_professions
+
+  - title: Share Forecasting
+    desc: Rolling-origin backtest, model selection and forecasts of skill shares with prediction intervals.
+    contents:
+      - prepare_share_tsibble
+      - backtest_share_models
+      - select_share_model
+      - forecast_share
+
   - title: Skill Extraction
     desc: Extract profession-specific skills and build skill profiles.
     contents:

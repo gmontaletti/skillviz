@@ -1,3 +1,68 @@
+# skillviz 0.6.0
+
+## Competenze emergenti
+
+* Nuove funzioni per misurare la dinamica delle competenze su pannelli mensili
+  di quote (annunci con la competenza su annunci con almeno una competenza):
+  - `compute_share_panel()` costruisce il pannello delle quote dagli annunci,
+    globale o per gruppo (ad esempio per professione);
+  - `compute_share_trend()` stima la pendenza del logit della quota con minimi
+    quadrati pesati in forma chiusa, con gradini opzionali nei mesi di rottura,
+    al netto della deriva comune, con errore standard corretto per la
+    sovradispersione e p-value aggiustati con Benjamini-Hochberg;
+  - `compute_yoy_ratio()` calcola il rapporto tra la quota degli ultimi mesi e
+    quella degli stessi mesi un anno prima, con intervallo di Katz;
+  - `compute_share_acceleration()` confronta la pendenza dell'ultima finestra
+    con quella della finestra precedente;
+  - `detect_skill_onset()` individua il mese di prima comparsa consolidata,
+    l'età in mesi e la censura a sinistra;
+  - `compute_rca_panel()` e `compute_diffusion_panel()` calcolano il vantaggio
+    comparato per finestra, il numero di professioni con RCA di almeno 1 e
+    l'entropia normalizzata della competenza tra le professioni;
+  - `compute_drift_index()` stima l'indice di deriva comune (mediana pesata
+    delle variazioni del logit), `detect_taxonomy_drift()` segnala i mesi di
+    rottura della qualità dei dati e le competenze la cui comparsa è un
+    artefatto di tassonomia;
+  - `calibrate_min_support()` sceglie il supporto minimo con l'affidabilità
+    split-half della pendenza;
+  - `score_emergence()` combina gli indicatori in un punteggio robusto e
+    assegna lo stato (Emergente, In crescita, Stabile, In calo, Nuova non
+    consolidata, Artefatto di tassonomia); `backtest_emergence()` ne valuta la
+    capacità previsiva con origini pseudo-prospettiche (F1, precisione@k).
+
+## Professioni in cambiamento
+
+* Nuove funzioni per confrontare i profili di competenze delle professioni tra
+  due finestre:
+  - `build_profile_pair()` costruisce i profili come matrici sparse;
+  - `compute_profile_turnover()` calcola il turnover coseno e il turnover netto
+    del rumore campionario;
+  - `decompose_profile_change()` scompone in modo additivo la distanza al
+    quadrato per gruppi di competenze;
+  - `compute_turnover_null()` stima la distribuzione nulla split-half del
+    turnover;
+  - `compute_change_breadth()` misura l'ampiezza del cambiamento (competenze
+    in crescita e in calo, gruppi coinvolti, entropia) e ordina le professioni;
+  - `compute_emerging_uptake()` misura la quota di annunci con almeno una
+    competenza emergente e il suo confronto con il dato regionale;
+  - `classify_emerging_professions()` applica la regola a tre condizioni
+    (domanda in crescita, turnover oltre il nullo, assorbimento oltre la
+    regione).
+
+## Previsione delle quote
+
+* Nuove funzioni per prevedere le quote delle competenze a 12 mesi con
+  intervalli di previsione, basate su fable (pacchetti suggeriti):
+  - `prepare_share_tsibble()` prepara le serie mensili;
+  - `backtest_share_models()` confronta SNAIVE, random walk con deriva, ETS e
+    ARIMA sul logit della quota con origini mobili (MASE, RMSSE, copertura
+    degli intervalli all'80% e al 95%);
+  - `select_share_model()` sceglie il modello per strato, con ripiego su
+    SNAIVE;
+  - `forecast_share()` restituisce la mediana prevista e gli intervalli
+    all'80% e al 95% sulla scala della quota.
+* `distributional` è aggiunto ai pacchetti suggeriti.
+
 # skillviz 0.5.1
 
 ## Correzione di `classify_esco_to_cpi()`
