@@ -1,5 +1,42 @@
 # Changelog
 
+## skillviz 0.5.1
+
+### Correzione di `classify_esco_to_cpi()`
+
+- [`classify_esco_to_cpi()`](https://gmontaletti.github.io/skillviz/reference/classify_esco_to_cpi.md)
+  restituiva previsioni sistematicamente orientate verso le classi CPI
+  più piccole. Le cause erano tre, tutte nel calcolo della
+  verosimiglianza:
+
+  - il termine di assenza usava la probabilità di emissione multinomiale
+    di una competenza non osservata, `log(alpha / (n_c + alpha V))`, al
+    posto della probabilità di assenza di Bernoulli `log(1 - theta)`;
+  - la join interna sulla competenza eliminava le coppie (classe,
+    competenza) a conteggio zero, che non ricevevano il pavimento
+    smussato: una classe che condivideva più competenze con il codice
+    riceveva un punteggio più basso;
+  - le probabilità di presenza, frequenze documentali, erano
+    normalizzate con `n_c + alpha V` invece di `n_c + 2 alpha`.
+
+- La funzione implementa ora un naive Bayes di Bernoulli completo: ogni
+  annuncio del codice ESCO L4 contribuisce `log(theta)` per ogni
+  competenza presente e `log(1 - theta)` per ogni competenza assente,
+  con `theta = (m + alpha) / (n_c + 2 alpha)`. Tutte le classi sono
+  candidate per ogni codice, anche quelle senza competenze in comune. La
+  documentazione, che indicava un modello multinomiale, è stata
+  allineata.
+
+- Su 396 codici ESCO L4 etichettati degli annunci 2025, esclusi a turno
+  dall’addestramento in 5 fold, l’accuratezza top-1 sul CP3 modale passa
+  dallo 0,0% al 28,5% (53,0% pesando per numero di annunci; top-3
+  36,4%), contro il 3,8% della sola classe più frequente. Le previsioni
+  di tutti i codici cambiano: chi ha salvato output della versione
+  precedente deve ricalcolarli.
+
+- `alpha` deve essere un singolo numero positivo; altrimenti la funzione
+  si ferma con un errore.
+
 ## skillviz 0.5.0
 
 ### Classificatore a centroidi (non adottato)

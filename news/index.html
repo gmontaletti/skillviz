@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,6 +32,22 @@
       <small>Source: <a href="https://github.com/gmontaletti/skillviz/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.5.1" id="skillviz-051">skillviz 0.5.1<a class="anchor" aria-label="anchor" href="#skillviz-051"></a></h2>
+<div class="section level3">
+<h3 id="correzione-di-classify_esco_to_cpi-0-5-1">Correzione di <code>classify_esco_to_cpi()</code>
+<a class="anchor" aria-label="anchor" href="#correzione-di-classify_esco_to_cpi-0-5-1"></a></h3>
+<ul><li>
+<p><code><a href="../reference/classify_esco_to_cpi.html">classify_esco_to_cpi()</a></code> restituiva previsioni sistematicamente orientate verso le classi CPI più piccole. Le cause erano tre, tutte nel calcolo della verosimiglianza:</p>
+<ul><li>il termine di assenza usava la probabilità di emissione multinomiale di una competenza non osservata, <code>log(alpha / (n_c + alpha V))</code>, al posto della probabilità di assenza di Bernoulli <code>log(1 - theta)</code>;</li>
+<li>la join interna sulla competenza eliminava le coppie (classe, competenza) a conteggio zero, che non ricevevano il pavimento smussato: una classe che condivideva più competenze con il codice riceveva un punteggio più basso;</li>
+<li>le probabilità di presenza, frequenze documentali, erano normalizzate con <code>n_c + alpha V</code> invece di <code>n_c + 2 alpha</code>.</li>
+</ul></li>
+<li><p>La funzione implementa ora un naive Bayes di Bernoulli completo: ogni annuncio del codice ESCO L4 contribuisce <code>log(theta)</code> per ogni competenza presente e <code>log(1 - theta)</code> per ogni competenza assente, con <code>theta = (m + alpha) / (n_c + 2 alpha)</code>. Tutte le classi sono candidate per ogni codice, anche quelle senza competenze in comune. La documentazione, che indicava un modello multinomiale, è stata allineata.</p></li>
+<li><p>Su 396 codici ESCO L4 etichettati degli annunci 2025, esclusi a turno dall’addestramento in 5 fold, l’accuratezza top-1 sul CP3 modale passa dallo 0,0% al 28,5% (53,0% pesando per numero di annunci; top-3 36,4%), contro il 3,8% della sola classe più frequente. Le previsioni di tutti i codici cambiano: chi ha salvato output della versione precedente deve ricalcolarli.</p></li>
+<li><p><code>alpha</code> deve essere un singolo numero positivo; altrimenti la funzione si ferma con un errore.</p></li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.5.0" id="skillviz-050">skillviz 0.5.0<a class="anchor" aria-label="anchor" href="#skillviz-050"></a></h2>
 <div class="section level3">

@@ -1,6 +1,6 @@
 # Classify unmapped ESCO L4 codes to CPI groups via Naive Bayes
 
-Uses a Multinomial Naive Bayes classifier to predict CPI 3-digit groups
+Uses a Bernoulli Naive Bayes classifier to predict CPI 3-digit groups
 for ESCO level 4 codes that lack a CP2021 mapping in the postings data.
 The crosswalk between ESCO L4 and CPI groups is derived directly from
 the postings via majority vote on the `cp2021_id_level_3` column.
@@ -38,7 +38,8 @@ classify_esco_to_cpi(
 
 - alpha:
 
-  Numeric, Laplace smoothing parameter (default: 1.0).
+  Positive numeric, Laplace smoothing parameter for the Bernoulli
+  presence probabilities (default: 1.0).
 
 - crosswalk:
 
@@ -92,6 +93,21 @@ postings but absent from `crosswalk$idesco_level_4` (the official
 crosswalk). This typically yields more unmapped codes than the default
 behaviour, which considers any code with at least one non-empty
 `cp2021_id_level_3` posting as mapped.
+
+Each posting is a binary vector over the `V` distinct skills in
+`skills`. For CPI class `c` with `n_c` training postings, of which
+`m_cs` carry skill `s`, the presence probability is
+`theta_cs = (m_cs + alpha) / (n_c + 2 * alpha)`. The postings of an
+unmapped ESCO L4 code are scored as independent draws from a single
+class: every posting contributes `log(theta_cs)` for each skill it
+carries and `log(1 - theta_cs)` for each skill it lacks, added to the
+log prior `log(n_c / n)`. Postings without skills are counted as
+postings with every skill absent, both in training and in prediction.
+
+Every class is scored against every unmapped code, including classes
+that share no skill with it: a skill never observed in a class is scored
+at the smoothed floor `alpha / (n_c + 2 * alpha)`, not dropped. Only
+ESCO L4 codes with at least one skill are classified.
 
 ## Examples
 
