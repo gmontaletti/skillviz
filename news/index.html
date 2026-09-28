@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.4.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,6 +32,17 @@
       <small>Source: <a href="https://github.com/gmontaletti/skillviz/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.5.0" id="skillviz-050">skillviz 0.5.0<a class="anchor" aria-label="anchor" href="#skillviz-050"></a></h2>
+<div class="section level3">
+<h3 id="classificatore-a-centroidi-non-adottato-0-5-0">Classificatore a centroidi (non adottato)<a class="anchor" aria-label="anchor" href="#classificatore-a-centroidi-non-adottato-0-5-0"></a></h3>
+<ul><li><p>Due nuove funzioni esportate, <code><a href="../reference/build_cp_profiles.html">build_cp_profiles()</a></code> e <code><a href="../reference/predict_cp5_centroid.html">predict_cp5_centroid()</a></code>, offrono un’alternativa statica a <code><a href="../reference/predict_cp5_knn.html">predict_cp5_knn()</a></code>. La prima comprime gli annunci etichettati in una matrice sparsa competenze × coppia (gruppo ESCO, codice CP5); la seconda assegna il codice per punteggio contro quei profili, senza consultare i dati di addestramento. Il modello diventa così un oggetto ispezionabile, versionabile e spedibile, di dimensione governata dal numero di coppie (circa 24.000) e non dal numero di annunci.</p></li>
+<li><p><code><a href="../reference/predict_cp5_centroid.html">predict_cp5_centroid()</a></code> espone dodici regole di punteggio (<code>distance</code>), una prior sulla dimensione della classe (<code>prior_weight</code>), un termine naive-Bayes sul settore e la stessa convenzione di <code>method</code> di <code><a href="../reference/predict_cp5_knn.html">predict_cp5_knn()</a></code> (<code>centroid</code>, <code>single_candidate</code>, <code>frequency</code>, <code>no_match</code>), così che le popolazioni decise dai due modelli restino confrontabili.</p></li>
+<li><p><strong>Nessuna delle due funzioni è chiamata dalla pipeline o dal container.</strong> Su un blocco sigillato di tre mesi il centroide misura un’accuratezza CP5 dell’84,13% contro l’83,92% del k-NN sulle righe decise dal modello — cioè equivalente, perché lo scarto sta sotto la soglia di rumore di 0,244 punti adottata dal progetto — a parità di copertura e con codifica 16 volte più rapida (7,3 s contro 118,7 s, più 2,4 s di costruzione). Il gate pre-registrato è comunque fallito, su un solo criterio secondario: il picco di memoria, 0,531× contro una soglia di 0,50×.</p></li>
+<li><p>Chiuso con esito negativo anche l’asse del segmento privo di codice ESCO: su quelle righe il centroide si ferma al 68,28% se addestrato sul solo segmento e al 58,47% se addestrato su tutta la matrice, contro il 75,67% del modello in esercizio (one-hot + xgboost). Senza restrittore i candidati sono 270–498 e le sole competenze non bastano a separarli.</p></li>
+<li><p>Il documento <code>reference/skillviz/centroide.md</code> riporta il flusso delle due funzioni, l’ottimo misurato di ogni iperparametro, l’esito completo del gate e gli assi già chiusi, da non rimisurare.</p></li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.4.1" id="skillviz-041">skillviz 0.4.1<a class="anchor" aria-label="anchor" href="#skillviz-041"></a></h2>
 <ul><li><p>Nuovo documento <code>container/LIMITI.md</code>: riferimento per chi consuma <code>staging.gm_cp4_imputed</code>, con ciò che le procedure <strong>non</strong> garantiscono e la misura che quantifica ciascun limite. Il primo è quello che condiziona tutti gli altri — nessuna validazione riguarda la popolazione effettivamente trattata, perché ogni accuratezza è misurata su annunci già codificati dal fornitore e applicata a quelli che non lo sono.</p></li>
