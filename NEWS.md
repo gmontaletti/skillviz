@@ -1,3 +1,41 @@
+# skillviz 0.5.0
+
+## Classificatore a centroidi (non adottato)
+
+* Due nuove funzioni esportate, `build_cp_profiles()` e
+  `predict_cp5_centroid()`, offrono un'alternativa statica a
+  `predict_cp5_knn()`. La prima comprime gli annunci etichettati in una matrice
+  sparsa competenze × coppia (gruppo ESCO, codice CP5); la seconda assegna il
+  codice per punteggio contro quei profili, senza consultare i dati di
+  addestramento. Il modello diventa così un oggetto ispezionabile, versionabile
+  e spedibile, di dimensione governata dal numero di coppie (circa 24.000) e
+  non dal numero di annunci.
+
+* `predict_cp5_centroid()` espone dodici regole di punteggio (`distance`), una
+  prior sulla dimensione della classe (`prior_weight`), un termine naive-Bayes
+  sul settore e la stessa convenzione di `method` di `predict_cp5_knn()`
+  (`centroid`, `single_candidate`, `frequency`, `no_match`), così che le
+  popolazioni decise dai due modelli restino confrontabili.
+
+* **Nessuna delle due funzioni è chiamata dalla pipeline o dal container.** Su
+  un blocco sigillato di tre mesi il centroide misura un'accuratezza CP5
+  dell'84,13% contro l'83,92% del k-NN sulle righe decise dal modello — cioè
+  equivalente, perché lo scarto sta sotto la soglia di rumore di 0,244 punti
+  adottata dal progetto — a parità di copertura e con codifica 16 volte più
+  rapida (7,3 s contro 118,7 s, più 2,4 s di costruzione). Il gate
+  pre-registrato è comunque fallito, su un solo criterio secondario: il picco di
+  memoria, 0,531× contro una soglia di 0,50×.
+
+* Chiuso con esito negativo anche l'asse del segmento privo di codice ESCO: su
+  quelle righe il centroide si ferma al 68,28% se addestrato sul solo segmento e
+  al 58,47% se addestrato su tutta la matrice, contro il 75,67% del modello in
+  esercizio (one-hot + xgboost). Senza restrittore i candidati sono 270–498 e le
+  sole competenze non bastano a separarli.
+
+* Il documento `reference/skillviz/centroide.md` riporta il flusso delle due
+  funzioni, l'ottimo misurato di ogni iperparametro, l'esito completo del gate e
+  gli assi già chiusi, da non rimisurare.
+
 # skillviz 0.4.1
 
 * Nuovo documento `container/LIMITI.md`: riferimento per chi consuma
