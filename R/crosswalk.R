@@ -199,7 +199,7 @@ prepare_annunci_geography <- function(
 
 #' Classify unmapped ESCO L4 codes to CPI groups via Naive Bayes
 #'
-#' Uses a Multinomial Naive Bayes classifier to predict CPI 3-digit groups
+#' Uses a Bernoulli Naive Bayes classifier to predict CPI 3-digit groups
 #' for ESCO level 4 codes that lack a CP2021 mapping in the postings data.
 #' The crosswalk between ESCO L4 and CPI groups is derived directly from
 #' the postings via majority vote on the `cp2021_id_level_3` column.
@@ -212,6 +212,22 @@ prepare_annunci_geography <- function(
 #' behaviour, which considers any code with at least one non-empty
 #' `cp2021_id_level_3` posting as mapped.
 #'
+#' @details
+#' Each posting is a binary vector over the `V` distinct skills in `skills`.
+#' For CPI class `c` with `n_c` training postings, of which `m_cs` carry skill
+#' `s`, the presence probability is `theta_cs = (m_cs + alpha) / (n_c +
+#' 2 * alpha)`. The postings of an unmapped ESCO L4 code are scored as
+#' independent draws from a single class: every posting contributes
+#' `log(theta_cs)` for each skill it carries and `log(1 - theta_cs)` for each
+#' skill it lacks, added to the log prior `log(n_c / n)`. Postings without
+#' skills are counted as postings with every skill absent, both in training
+#' and in prediction.
+#'
+#' Every class is scored against every unmapped code, including classes that
+#' share no skill with it: a skill never observed in a class is scored at the
+#' smoothed floor `alpha / (n_c + 2 * alpha)`, not dropped. Only ESCO L4 codes
+#' with at least one skill are classified.
+#'
 #' @param postings A data.table from `normalize_ojv()$postings`. Needs
 #'   `general_id`, `idesco_level_4`, `cp2021_id_level_3`, and
 #'   `cp2021_level_3`.
@@ -219,7 +235,8 @@ prepare_annunci_geography <- function(
 #'   `general_id` and `escoskill_level_3` (or `ESCOSKILL_LEVEL_3`).
 #' @param top_k Integer, number of top CPI predictions per ESCO L4 code
 #'   (default: 3).
-#' @param alpha Numeric, Laplace smoothing parameter (default: 1.0).
+#' @param alpha Positive numeric, Laplace smoothing parameter for the
+#'   Bernoulli presence probabilities (default: 1.0).
 #' @param crosswalk Optional data.table with an `idesco_level_4` column
 #'   representing the official ESCO-to-CPI mapping (e.g. from
 #'   `build_cpi_esco_crosswalk()`). When provided, "unmapped" ESCO L4 codes
@@ -265,6 +282,14 @@ classify_esco_to_cpi <- function(
     c("general_id", "idesco_level_4", "cp2021_id_level_3", "cp2021_level_3"),
     caller = "classify_esco_to_cpi"
   )
+  if (
+    !is.numeric(alpha) || length(alpha) != 1L || !is.finite(alpha) || alpha <= 0
+  ) {
+    stop(
+      "classify_esco_to_cpi: alpha must be a single positive number",
+      call. = FALSE
+    )
+  }
 
   # 2. normalize skill column name -----
   skill_col <- if ("ESCOSKILL_LEVEL_3" %in% names(skills)) {
@@ -373,8 +398,15 @@ classify_esco_to_cpi <- function(
     )
   }
 
-  # 6. compute skill likelihoods with Laplace smoothing -----
-  skill_class <- train[, .(count = uniqueN(general_id)), by = .(cod_3, skill)]
+  # 6. Bernoulli likelihoods with Laplace smoothing -----
+  # theta_cs = (m_cs + alpha) / (n_c + 2 alpha), m_cs = postings of class c
+  # carrying skill s. Both log(theta) and log(1 - theta) split into a class
+  # floor, valid for every skill, plus a correction that is exactly zero where
+  # m_cs = 0:
+  #   log(theta)     = a_c + log(1 + m / alpha)
+  #   log(1 - theta) = b_c + log(1 - m / (n_c + alpha))
+  # Zero cells are therefore scored by the floor and never need a row.
+  skill_class <- train[, .(m = uniqueN(general_id)), by = .(cod_3, skill)]
   V <- skills[, uniqueN(get(skill_col))]
 
   skill_class <- merge(
@@ -382,9 +414,22 @@ classify_esco_to_cpi <- function(
     class_counts[, .(cod_3, n_docs)],
     by = "cod_3"
   )
-  skill_class[, log_lik := log((count + alpha) / (n_docs + alpha * V))]
+  skill_class[, `:=`(
+    d_present = log1p(m / alpha),
+    d_absent = log1p(-m / (n_docs + alpha))
+  )]
 
-  class_counts[, log_absent := log(alpha / (n_docs + alpha * V))]
+  class_counts[, `:=`(
+    log_floor_present = log(alpha / (n_docs + 2 * alpha)),
+    log_floor_absent = log((n_docs + alpha) / (n_docs + 2 * alpha))
+  )]
+  class_counts <- merge(
+    class_counts,
+    skill_class[, .(sum_d_absent = sum(d_absent)), by = cod_3],
+    by = "cod_3",
+    all.x = TRUE
+  )
+  class_counts[is.na(sum_d_absent), sum_d_absent := 0]
 
   if (verbose) {
     message("classify_esco_to_cpi: vocabulary size = ", V)
@@ -408,29 +453,62 @@ classify_esco_to_cpi <- function(
   ]
 
   # 8. compute log-posteriors -----
+  # The postings of an ESCO L4 code are scored as independent draws from one
+  # class. With N_e postings and K_e = sum_s k_s skill occurrences:
+  #   log P(e | c) = K_e a_c + (N_e V - K_e) b_c + N_e sum_s d_absent_cs
+  #                + sum_{s observed} k_s (d_present_cs - d_absent_cs)
+  # The first three terms are dense (every code x every class); only the last
+  # needs the join, and a class missing from it contributes exactly zero.
+  posting_counts <- pred_postings[,
+    .(n_postings = uniqueN(general_id)),
+    by = idesco_level_4
+  ]
+  esco_stats <- esco_profiles[,
+    .(n_occ = sum(n_docs_with_skill), n_skills = .N),
+    by = idesco_level_4
+  ]
+  esco_stats <- merge(esco_stats, posting_counts, by = "idesco_level_4")
+
+  scores <- CJ(
+    idesco_level_4 = esco_stats$idesco_level_4,
+    cod_3 = class_counts$cod_3
+  )
+  scores <- merge(scores, esco_stats, by = "idesco_level_4")
   scores <- merge(
+    scores,
+    class_counts[, .(
+      cod_3,
+      log_prior,
+      log_floor_present,
+      log_floor_absent,
+      sum_d_absent
+    )],
+    by = "cod_3"
+  )
+
+  matched <- merge(
     esco_profiles,
-    skill_class[, .(cod_3, skill, log_lik)],
+    skill_class[, .(cod_3, skill, d_diff = d_present - d_absent)],
     by = "skill",
     allow.cartesian = TRUE
   )
-  scores <- scores[,
-    .(sum_log_lik = sum(n_docs_with_skill * log_lik)),
+  matched <- matched[,
+    .(sum_match = sum(n_docs_with_skill * d_diff)),
     by = .(idesco_level_4, cod_3)
   ]
-
-  scores <- merge(
-    scores,
-    class_counts[, .(cod_3, log_prior, log_absent)],
-    by = "cod_3"
-  )
-  esco_n_skills <- esco_profiles[,
-    .(n_observed = uniqueN(skill)),
-    by = idesco_level_4
+  scores[, sum_match := 0]
+  scores[
+    matched,
+    sum_match := i.sum_match,
+    on = .(idesco_level_4, cod_3)
   ]
-  scores <- merge(scores, esco_n_skills, by = "idesco_level_4")
+
   scores[,
-    log_posterior := log_prior + sum_log_lik + (V - n_observed) * log_absent
+    log_posterior := log_prior +
+      n_occ * log_floor_present +
+      (n_postings * V - n_occ) * log_floor_absent +
+      n_postings * sum_d_absent +
+      sum_match
   ]
 
   # 9. softmax normalization and top-k selection -----
@@ -446,17 +524,6 @@ classify_esco_to_cpi <- function(
   cpi_labels <- unique(train_postings[, .(cod_3, nome_3)])
   cpi_labels <- cpi_labels[, .(nome_3 = nome_3[1L]), by = cod_3]
   result <- merge(result, cpi_labels, by = "cod_3", all.x = TRUE)
-
-  posting_counts <- pred_postings[,
-    .(n_postings = uniqueN(general_id)),
-    by = idesco_level_4
-  ]
-  skill_counts <- esco_profiles[,
-    .(n_skills = uniqueN(skill)),
-    by = idesco_level_4
-  ]
-  result <- merge(result, posting_counts, by = "idesco_level_4")
-  result <- merge(result, skill_counts, by = "idesco_level_4")
 
   result <- result[, .(
     idesco_level_4,

@@ -379,3 +379,125 @@ test_that("empty string cp2021_id_level_3 is treated as unmapped", {
   # E001 is mapped
   expect_false("E001" %in% result$idesco_level_4)
 })
+
+# 12. Bernoulli posterior matches a dense reference -----
+
+# Dense Bernoulli naive Bayes over the full skill vocabulary, written without
+# joins: the sparse implementation must reproduce it.
+dense_bernoulli_nb <- function(postings, skills, alpha) {
+  sk <- sort(unique(skills$escoskill_level_3))
+  lab <- postings[!is.na(cp2021_id_level_3) & nzchar(cp2021_id_level_3)]
+  unl <- postings[!idesco_level_4 %in% lab$idesco_level_4]
+  x_of <- function(ids) {
+    x <- matrix(0, length(ids), length(sk))
+    s <- skills[general_id %in% ids]
+    x[cbind(match(s$general_id, ids), match(s$escoskill_level_3, sk))] <- 1
+    x
+  }
+  cls <- sort(unique(lab$cp2021_id_level_3))
+  out <- lapply(unique(unl$idesco_level_4), function(e) {
+    q <- x_of(unl[idesco_level_4 == e, general_id])
+    lp <- vapply(
+      cls,
+      function(cl) {
+        ids <- lab[cp2021_id_level_3 == cl, general_id]
+        th <- (colSums(x_of(ids)) + alpha) / (length(ids) + 2 * alpha)
+        log(length(ids) / nrow(lab)) +
+          sum(q %*% log(th)) +
+          sum((1 - q) %*% log(1 - th))
+      },
+      numeric(1)
+    )
+    p <- exp(lp - max(lp))
+    data.table::data.table(idesco_level_4 = e, cod_3 = cls, ref = p / sum(p))
+  })
+  data.table::rbindlist(out)
+}
+
+test_that("posterior equals the dense Bernoulli naive Bayes reference", {
+  set.seed(42)
+  n <- 120L
+  postings <- data.table::data.table(
+    general_id = seq_len(n),
+    idesco_level_4 = sample(sprintf("E%02d", 1:12), n, replace = TRUE)
+  )
+  lab <- stats::setNames(
+    rep(c("1.1.1", "2.2.2", "3.3.3"), length.out = 12),
+    sprintf("E%02d", 1:12)
+  )
+  postings[, cp2021_id_level_3 := lab[idesco_level_4]]
+  postings[idesco_level_4 %in% c("E11", "E12"), cp2021_id_level_3 := NA]
+  postings[, cp2021_level_3 := cp2021_id_level_3]
+  skills <- postings[,
+    list(escoskill_level_3 = sample(sprintf("S%02d", 1:15), 3L)),
+    by = general_id
+  ]
+
+  for (a in c(0.1, 1, 5)) {
+    res <- classify_esco_to_cpi(
+      postings,
+      skills,
+      top_k = 10L,
+      alpha = a,
+      verbose = FALSE
+    )
+    ref <- dense_bernoulli_nb(postings, skills, alpha = a)
+    cmp <- merge(ref, res, by = c("idesco_level_4", "cod_3"), all = TRUE)
+    expect_equal(nrow(cmp), nrow(ref))
+    expect_equal(cmp$probability, cmp$ref, tolerance = 1e-8)
+  }
+})
+
+# 13. Classes sharing no skill are still scored -----
+
+test_that("a class with no skill in common with the code is still a candidate", {
+  td <- make_test_data()
+  result <- classify_esco_to_cpi(
+    td$postings,
+    td$skills,
+    top_k = 10L,
+    verbose = FALSE
+  )
+  # E003 carries only S01 and S02, never seen in class 3.1.2.
+  expect_setequal(result[idesco_level_4 == "E003", cod_3], c("2.1.1", "3.1.2"))
+})
+
+# 14. No bias toward the smallest class -----
+
+test_that("a large class matching every skill beats a small partial match", {
+  # Class 1.1.1: 50 postings, each with S01-S04 plus one private filler skill,
+  # which widens the vocabulary. Class 9.9.9: 2 postings with S01 only. The
+  # unmapped code EQ carries S01-S04 on each of its 3 postings.
+  postings <- data.table::data.table(
+    general_id = 1:55,
+    idesco_level_4 = c(rep("EA", 50), rep("EB", 2), rep("EQ", 3)),
+    cp2021_id_level_3 = c(rep("1.1.1", 50), rep("9.9.9", 2), rep(NA, 3))
+  )
+  postings[, cp2021_level_3 := cp2021_id_level_3]
+  skills <- rbind(
+    data.table::CJ(
+      general_id = c(1:50, 53:55),
+      escoskill_level_3 = sprintf("S%02d", 1:4)
+    ),
+    data.table::data.table(general_id = 51:52, escoskill_level_3 = "S01"),
+    data.table::data.table(
+      general_id = 1:50,
+      escoskill_level_3 = sprintf("X%03d", 1:50)
+    )
+  )
+
+  result <- classify_esco_to_cpi(postings, skills, top_k = 1L, verbose = FALSE)
+  expect_identical(result[idesco_level_4 == "EQ", cod_3], "1.1.1")
+})
+
+# 15. Invalid alpha -----
+
+test_that("alpha must be a single positive number", {
+  td <- make_test_data()
+  for (bad in list(0, -1, NA_real_, Inf, c(1, 2), "1")) {
+    expect_error(
+      classify_esco_to_cpi(td$postings, td$skills, alpha = bad, verbose = FALSE),
+      "alpha must be a single positive number"
+    )
+  }
+})
