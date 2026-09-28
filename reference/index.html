@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -378,6 +378,194 @@
 
         </dt>
         <dd>Compute year-over-year variation in skill rankings</dd>
+      </dl></div><div class="section level2">
+      <h2 id="emerging-skills">Emerging Skills<a class="anchor" aria-label="anchor" href="#emerging-skills"></a></h2>
+
+      <div class="section-desc"><p>Share panels, drift-net trends, onset, diffusion, taxonomy drift and the emergence score.</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="compute_share_panel.html">compute_share_panel()</a></code>
+
+        </dt>
+        <dd>Monthly skill share panel from posting-level incidence</dd>
+
+        <dt>
+
+          <code><a href="compute_share_trend.html">compute_share_trend()</a></code>
+
+        </dt>
+        <dd>Drift-net logit trend of skill shares</dd>
+
+        <dt>
+
+          <code><a href="compute_yoy_ratio.html">compute_yoy_ratio()</a></code>
+
+        </dt>
+        <dd>Year-on-year ratio of pooled shares with Katz confidence interval</dd>
+
+        <dt>
+
+          <code><a href="compute_share_acceleration.html">compute_share_acceleration()</a></code>
+
+        </dt>
+        <dd>Acceleration of the logit share trend</dd>
+
+        <dt>
+
+          <code><a href="detect_skill_onset.html">detect_skill_onset()</a></code>
+
+        </dt>
+        <dd>First month of consolidated presence of each series</dd>
+
+        <dt>
+
+          <code><a href="compute_rca_panel.html">compute_rca_panel()</a></code>
+
+        </dt>
+        <dd>Revealed comparative advantage of skills by profession and window</dd>
+
+        <dt>
+
+          <code><a href="compute_diffusion_panel.html">compute_diffusion_panel()</a></code>
+
+        </dt>
+        <dd>Diffusion of skills across professions by window</dd>
+
+        <dt>
+
+          <code><a href="compute_drift_index.html">compute_drift_index()</a></code>
+
+        </dt>
+        <dd>Common drift index of logit shares</dd>
+
+        <dt>
+
+          <code><a href="detect_taxonomy_drift.html">detect_taxonomy_drift()</a></code>
+
+        </dt>
+        <dd>Detect extraction and taxonomy breaks</dd>
+
+        <dt>
+
+          <code><a href="calibrate_min_support.html">calibrate_min_support()</a></code>
+
+        </dt>
+        <dd>Calibrate the minimum support by split-half reliability</dd>
+
+        <dt>
+
+          <code><a href="score_emergence.html">score_emergence()</a></code>
+
+        </dt>
+        <dd>Composite emergence score and skill state</dd>
+
+        <dt>
+
+          <code><a href="backtest_emergence.html">backtest_emergence()</a></code>
+
+        </dt>
+        <dd>Pseudo-prospective backtest of the emergence score</dd>
+      </dl></div><div class="section level2">
+      <h2 id="changing-and-emerging-professions">Changing and Emerging Professions<a class="anchor" aria-label="anchor" href="#changing-and-emerging-professions"></a></h2>
+
+      <div class="section-desc"><p>Profile turnover, decomposition by skill groups, breadth of change and emerging professions.</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="build_profile_pair.html">build_profile_pair()</a></code>
+
+        </dt>
+        <dd>Skill profiles of professions in two windows</dd>
+
+        <dt>
+
+          <code><a href="compute_profile_turnover.html">compute_profile_turnover()</a></code>
+
+        </dt>
+        <dd>Turnover of profession skill profiles</dd>
+
+        <dt>
+
+          <code><a href="decompose_profile_change.html">decompose_profile_change()</a></code>
+
+        </dt>
+        <dd>Additive decomposition of profile change by skill groups</dd>
+
+        <dt>
+
+          <code><a href="compute_turnover_null.html">compute_turnover_null()</a></code>
+
+        </dt>
+        <dd>Split-half null distribution of profile turnover</dd>
+
+        <dt>
+
+          <code><a href="compute_change_breadth.html">compute_change_breadth()</a></code>
+
+        </dt>
+        <dd>Breadth of skill change by profession</dd>
+
+        <dt>
+
+          <code><a href="compute_emerging_uptake.html">compute_emerging_uptake()</a></code>
+
+        </dt>
+        <dd>Uptake of emerging skills by profession</dd>
+
+        <dt>
+
+          <code><a href="classify_emerging_professions.html">classify_emerging_professions()</a></code>
+
+        </dt>
+        <dd>Classify emerging professions</dd>
+      </dl></div><div class="section level2">
+      <h2 id="share-forecasting">Share Forecasting<a class="anchor" aria-label="anchor" href="#share-forecasting"></a></h2>
+
+      <div class="section-desc"><p>Rolling-origin backtest, model selection and forecasts of skill shares with prediction intervals.</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="prepare_share_tsibble.html">prepare_share_tsibble()</a></code>
+
+        </dt>
+        <dd>Prepare a tsibble of skill shares for forecasting</dd>
+
+        <dt>
+
+          <code><a href="backtest_share_models.html">backtest_share_models()</a></code>
+
+        </dt>
+        <dd>Rolling-origin backtest of share forecasting models</dd>
+
+        <dt>
+
+          <code><a href="select_share_model.html">select_share_model()</a></code>
+
+        </dt>
+        <dd>Select the forecasting model by stratum</dd>
+
+        <dt>
+
+          <code><a href="forecast_share.html">forecast_share()</a></code>
+
+        </dt>
+        <dd>Forecast skill shares with prediction intervals</dd>
       </dl></div><div class="section level2">
       <h2 id="skill-extraction">Skill Extraction<a class="anchor" aria-label="anchor" href="#skill-extraction"></a></h2>
 

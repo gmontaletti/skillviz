@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,6 +32,66 @@
       <small>Source: <a href="https://github.com/gmontaletti/skillviz/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.6.0" id="skillviz-060">skillviz 0.6.0<a class="anchor" aria-label="anchor" href="#skillviz-060"></a></h2>
+<div class="section level3">
+<h3 id="competenze-emergenti-0-6-0">Competenze emergenti<a class="anchor" aria-label="anchor" href="#competenze-emergenti-0-6-0"></a></h3>
+<ul><li>Nuove funzioni per misurare la dinamica delle competenze su pannelli mensili di quote (annunci con la competenza su annunci con almeno una competenza):
+<ul><li>
+<code><a href="../reference/compute_share_panel.html">compute_share_panel()</a></code> costruisce il pannello delle quote dagli annunci, globale o per gruppo (ad esempio per professione);</li>
+<li>
+<code><a href="../reference/compute_share_trend.html">compute_share_trend()</a></code> stima la pendenza del logit della quota con minimi quadrati pesati in forma chiusa, con gradini opzionali nei mesi di rottura, al netto della deriva comune, con errore standard corretto per la sovradispersione e p-value aggiustati con Benjamini-Hochberg;</li>
+<li>
+<code><a href="../reference/compute_yoy_ratio.html">compute_yoy_ratio()</a></code> calcola il rapporto tra la quota degli ultimi mesi e quella degli stessi mesi un anno prima, con intervallo di Katz;</li>
+<li>
+<code><a href="../reference/compute_share_acceleration.html">compute_share_acceleration()</a></code> confronta la pendenza dell’ultima finestra con quella della finestra precedente;</li>
+<li>
+<code><a href="../reference/detect_skill_onset.html">detect_skill_onset()</a></code> individua il mese di prima comparsa consolidata, l’età in mesi e la censura a sinistra;</li>
+<li>
+<code><a href="../reference/compute_rca_panel.html">compute_rca_panel()</a></code> e <code><a href="../reference/compute_diffusion_panel.html">compute_diffusion_panel()</a></code> calcolano il vantaggio comparato per finestra, il numero di professioni con RCA di almeno 1 e l’entropia normalizzata della competenza tra le professioni;</li>
+<li>
+<code><a href="../reference/compute_drift_index.html">compute_drift_index()</a></code> stima l’indice di deriva comune (mediana pesata delle variazioni del logit), <code><a href="../reference/detect_taxonomy_drift.html">detect_taxonomy_drift()</a></code> segnala i mesi di rottura della qualità dei dati e le competenze la cui comparsa è un artefatto di tassonomia;</li>
+<li>
+<code><a href="../reference/calibrate_min_support.html">calibrate_min_support()</a></code> sceglie il supporto minimo con l’affidabilità split-half della pendenza;</li>
+<li>
+<code><a href="../reference/score_emergence.html">score_emergence()</a></code> combina gli indicatori in un punteggio robusto e assegna lo stato (Emergente, In crescita, Stabile, In calo, Nuova non consolidata, Artefatto di tassonomia); <code><a href="../reference/backtest_emergence.html">backtest_emergence()</a></code> ne valuta la capacità previsiva con origini pseudo-prospettiche (F1, <a href="mailto:precisione@k" class="email">precisione@k</a>).</li>
+</ul></li>
+</ul></div>
+<div class="section level3">
+<h3 id="professioni-in-cambiamento-0-6-0">Professioni in cambiamento<a class="anchor" aria-label="anchor" href="#professioni-in-cambiamento-0-6-0"></a></h3>
+<ul><li>Nuove funzioni per confrontare i profili di competenze delle professioni tra due finestre:
+<ul><li>
+<code><a href="../reference/build_profile_pair.html">build_profile_pair()</a></code> costruisce i profili come matrici sparse;</li>
+<li>
+<code><a href="../reference/compute_profile_turnover.html">compute_profile_turnover()</a></code> calcola il turnover coseno e il turnover netto del rumore campionario;</li>
+<li>
+<code><a href="../reference/decompose_profile_change.html">decompose_profile_change()</a></code> scompone in modo additivo la distanza al quadrato per gruppi di competenze;</li>
+<li>
+<code><a href="../reference/compute_turnover_null.html">compute_turnover_null()</a></code> stima la distribuzione nulla split-half del turnover;</li>
+<li>
+<code><a href="../reference/compute_change_breadth.html">compute_change_breadth()</a></code> misura l’ampiezza del cambiamento (competenze in crescita e in calo, gruppi coinvolti, entropia) e ordina le professioni;</li>
+<li>
+<code><a href="../reference/compute_emerging_uptake.html">compute_emerging_uptake()</a></code> misura la quota di annunci con almeno una competenza emergente e il suo confronto con il dato regionale;</li>
+<li>
+<code><a href="../reference/classify_emerging_professions.html">classify_emerging_professions()</a></code> applica la regola a tre condizioni (domanda in crescita, turnover oltre il nullo, assorbimento oltre la regione).</li>
+</ul></li>
+</ul></div>
+<div class="section level3">
+<h3 id="previsione-delle-quote-0-6-0">Previsione delle quote<a class="anchor" aria-label="anchor" href="#previsione-delle-quote-0-6-0"></a></h3>
+<ul><li>Nuove funzioni per prevedere le quote delle competenze a 12 mesi con intervalli di previsione, basate su fable (pacchetti suggeriti):
+<ul><li>
+<code><a href="../reference/prepare_share_tsibble.html">prepare_share_tsibble()</a></code> prepara le serie mensili;</li>
+<li>
+<code><a href="../reference/backtest_share_models.html">backtest_share_models()</a></code> confronta SNAIVE, random walk con deriva, ETS e ARIMA sul logit della quota con origini mobili (MASE, RMSSE, copertura degli intervalli all’80% e al 95%);</li>
+<li>
+<code><a href="../reference/select_share_model.html">select_share_model()</a></code> sceglie il modello per strato, con ripiego su SNAIVE;</li>
+<li>
+<code><a href="../reference/forecast_share.html">forecast_share()</a></code> restituisce la mediana prevista e gli intervalli all’80% e al 95% sulla scala della quota.</li>
+</ul></li>
+<li>
+<code>distributional</code> è aggiunto ai pacchetti suggeriti.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.5.1" id="skillviz-051">skillviz 0.5.1<a class="anchor" aria-label="anchor" href="#skillviz-051"></a></h2>
 <div class="section level3">

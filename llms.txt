@@ -64,7 +64,7 @@ graph <- plot_cooc_graph(cooccorrenza, top_n = 50)
 To cite skillviz in publications, use:
 
     Montaletti G (2026). skillviz: Skill Co-Occurrence Analysis and Visualization
-    from Online Job Advertisements. R package version 0.5.1.
+    from Online Job Advertisements. R package version 0.6.0.
     https://github.com/gmontaletti/skillviz
 
 A BibTeX entry:
@@ -74,7 +74,7 @@ A BibTeX entry:
   title = {skillviz: Skill Co-Occurrence Analysis and Visualization from Online Job Advertisements},
   author = {Giampaolo Montaletti},
   year = {2026},
-  note = {R package version 0.5.1},
+  note = {R package version 0.6.0},
   url = {https://github.com/gmontaletti/skillviz},
 }
 ```
@@ -210,6 +210,70 @@ Track skill ranking evolution and rank variation over time.
   : Compute skill ranking per profession over time periods
 - [`compute_skill_variation()`](https://gmontaletti.github.io/skillviz/reference/compute_skill_variation.md)
   : Compute year-over-year variation in skill rankings
+
+## Emerging Skills
+
+Share panels, drift-net trends, onset, diffusion, taxonomy drift and the
+emergence score.
+
+- [`compute_share_panel()`](https://gmontaletti.github.io/skillviz/reference/compute_share_panel.md)
+  : Monthly skill share panel from posting-level incidence
+- [`compute_share_trend()`](https://gmontaletti.github.io/skillviz/reference/compute_share_trend.md)
+  : Drift-net logit trend of skill shares
+- [`compute_yoy_ratio()`](https://gmontaletti.github.io/skillviz/reference/compute_yoy_ratio.md)
+  : Year-on-year ratio of pooled shares with Katz confidence interval
+- [`compute_share_acceleration()`](https://gmontaletti.github.io/skillviz/reference/compute_share_acceleration.md)
+  : Acceleration of the logit share trend
+- [`detect_skill_onset()`](https://gmontaletti.github.io/skillviz/reference/detect_skill_onset.md)
+  : First month of consolidated presence of each series
+- [`compute_rca_panel()`](https://gmontaletti.github.io/skillviz/reference/compute_rca_panel.md)
+  : Revealed comparative advantage of skills by profession and window
+- [`compute_diffusion_panel()`](https://gmontaletti.github.io/skillviz/reference/compute_diffusion_panel.md)
+  : Diffusion of skills across professions by window
+- [`compute_drift_index()`](https://gmontaletti.github.io/skillviz/reference/compute_drift_index.md)
+  : Common drift index of logit shares
+- [`detect_taxonomy_drift()`](https://gmontaletti.github.io/skillviz/reference/detect_taxonomy_drift.md)
+  : Detect extraction and taxonomy breaks
+- [`calibrate_min_support()`](https://gmontaletti.github.io/skillviz/reference/calibrate_min_support.md)
+  : Calibrate the minimum support by split-half reliability
+- [`score_emergence()`](https://gmontaletti.github.io/skillviz/reference/score_emergence.md)
+  : Composite emergence score and skill state
+- [`backtest_emergence()`](https://gmontaletti.github.io/skillviz/reference/backtest_emergence.md)
+  : Pseudo-prospective backtest of the emergence score
+
+## Changing and Emerging Professions
+
+Profile turnover, decomposition by skill groups, breadth of change and
+emerging professions.
+
+- [`build_profile_pair()`](https://gmontaletti.github.io/skillviz/reference/build_profile_pair.md)
+  : Skill profiles of professions in two windows
+- [`compute_profile_turnover()`](https://gmontaletti.github.io/skillviz/reference/compute_profile_turnover.md)
+  : Turnover of profession skill profiles
+- [`decompose_profile_change()`](https://gmontaletti.github.io/skillviz/reference/decompose_profile_change.md)
+  : Additive decomposition of profile change by skill groups
+- [`compute_turnover_null()`](https://gmontaletti.github.io/skillviz/reference/compute_turnover_null.md)
+  : Split-half null distribution of profile turnover
+- [`compute_change_breadth()`](https://gmontaletti.github.io/skillviz/reference/compute_change_breadth.md)
+  : Breadth of skill change by profession
+- [`compute_emerging_uptake()`](https://gmontaletti.github.io/skillviz/reference/compute_emerging_uptake.md)
+  : Uptake of emerging skills by profession
+- [`classify_emerging_professions()`](https://gmontaletti.github.io/skillviz/reference/classify_emerging_professions.md)
+  : Classify emerging professions
+
+## Share Forecasting
+
+Rolling-origin backtest, model selection and forecasts of skill shares
+with prediction intervals.
+
+- [`prepare_share_tsibble()`](https://gmontaletti.github.io/skillviz/reference/prepare_share_tsibble.md)
+  : Prepare a tsibble of skill shares for forecasting
+- [`backtest_share_models()`](https://gmontaletti.github.io/skillviz/reference/backtest_share_models.md)
+  : Rolling-origin backtest of share forecasting models
+- [`select_share_model()`](https://gmontaletti.github.io/skillviz/reference/select_share_model.md)
+  : Select the forecasting model by stratum
+- [`forecast_share()`](https://gmontaletti.github.io/skillviz/reference/forecast_share.md)
+  : Forecast skill shares with prediction intervals
 
 ## Skill Extraction
 
