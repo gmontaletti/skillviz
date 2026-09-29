@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,6 +32,15 @@
       <small>Source: <a href="https://github.com/gmontaletti/skillviz/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.6.1" id="skillviz-061">skillviz 0.6.1<a class="anchor" aria-label="anchor" href="#skillviz-061"></a></h2>
+<div class="section level3">
+<h3 id="pesi-della-pendenza-delle-quote-0-6-1">Pesi della pendenza delle quote<a class="anchor" aria-label="anchor" href="#pesi-della-pendenza-delle-quote-0-6-1"></a></h3>
+<ul><li><p><code><a href="../reference/compute_share_trend.html">compute_share_trend()</a></code> e <code><a href="../reference/compute_share_acceleration.html">compute_share_acceleration()</a></code> hanno un nuovo argomento <code>weights</code>. Con il valore predefinito <code>"pooled"</code> ogni mese è pesato con la varianza binomiale calcolata sulla quota complessiva della serie nella finestra, <code>w = 1 / (1 / (n p + 0,5) + 1 / (n (1 - p) + 0,5))</code> con <code>p = somma(x) / somma(n)</code>. Con <code>"observed"</code> si ottiene il comportamento della versione 0.6.0, in cui il peso dipende dal conteggio osservato del mese.</p></li>
+<li><p>Con i pesi osservati un mese con conteggio zero pesa circa 0,5 qualunque sia il denominatore, mentre un mese con conteggio elevato pesa circa quanto il conteggio: una competenza con un picco seguito da mesi a zero conservava una pendenza positiva ampia e significativa e poteva risultare Emergente. Con i pesi della quota complessiva la pendenza di queste serie è negativa o non significativa; sulle serie a quota costante le due opzioni danno risultati equivalenti.</p></li>
+<li><p>Il cambio del valore predefinito modifica i risultati di <code><a href="../reference/compute_share_trend.html">compute_share_trend()</a></code>, <code><a href="../reference/compute_share_acceleration.html">compute_share_acceleration()</a></code>, <code><a href="../reference/calibrate_min_support.html">calibrate_min_support()</a></code> (nuovo argomento <code>weights</code>) e <code><a href="../reference/backtest_emergence.html">backtest_emergence()</a></code> (nuovo argomento <code>trend_weights</code>). Queste funzioni sono state introdotte nella 0.6.0 e le usa soltanto la nuova pipeline delle competenze emergenti, i cui risultati non sono ancora stati pubblicati.</p></li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.6.0" id="skillviz-060">skillviz 0.6.0<a class="anchor" aria-label="anchor" href="#skillviz-060"></a></h2>
 <div class="section level3">

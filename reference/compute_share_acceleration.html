@@ -9,7 +9,7 @@ and the slope of the window periods before them."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -51,7 +51,8 @@ and the slope of the <code>window</code> periods before them.</p>
 <span>  window <span class="op">=</span> <span class="fl">12L</span>,</span>
 <span>  end <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  break_times <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  drift <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  drift <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  weights <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"pooled"</span>, <span class="st">"observed"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -100,6 +101,13 @@ a step dummy. Default <code>NULL</code>.</p></dd>
 as returned by <code><a href="compute_drift_index.html">compute_drift_index()</a></code>. Default <code>NULL</code> (no drift
 correction).</p></dd>
 
+
+<dt id="arg-weights">weights<a class="anchor" aria-label="anchor" href="#arg-weights"></a></dt>
+<dd><p>Weighting of the least squares: <code>"pooled"</code> (default,
+binomial variance at the pooled share of the series in the window) or
+<code>"observed"</code> (variance at the observed count of each period, the
+behaviour of version 0.6.0). See Details.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -109,7 +117,8 @@ correction).</p></dd>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>Both slopes are estimated as in <code><a href="compute_share_trend.html">compute_share_trend()</a></code>. The
+    <p>Both slopes are estimated as in <code><a href="compute_share_trend.html">compute_share_trend()</a></code>, with the same
+<code>weights</code> option; pooled weights use the pooled share of each window. The
 acceleration is \(a = \beta_{recent} - \beta_{previous}\) with
 \(SE(a) = \sqrt{SE_{recent}^2 + SE_{previous}^2}\) (the two windows
 are disjoint), \(z = a / SE(a)\), a two-sided normal p-value and a
@@ -232,12 +241,12 @@ BH-adjusted p-value over the series of the call.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Key: &lt;skill_id&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    skill_id pendenza_recente pendenza_precedente accelerazione          se</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      &lt;char&gt;            &lt;num&gt;               &lt;num&gt;         &lt;num&gt;       &lt;num&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1:        a       0.08015222         0.006368103    0.07378412 0.009925526</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2:        b       0.08034449        -0.005781780    0.08612627 0.008319623</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:        a       0.08099568         0.006188876    0.07480680 0.009647741</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2:        b       0.08220994        -0.005564075    0.08777401 0.008383171</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>            z      p_value        p_adj</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>        &lt;num&gt;        &lt;num&gt;        &lt;num&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1:  7.433774 1.055419e-13 1.055419e-13</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2: 10.352184 4.090450e-25 8.180899e-25</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:  7.753815 8.917209e-15 8.917209e-15</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2: 10.470264 1.183131e-25 2.366262e-25</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

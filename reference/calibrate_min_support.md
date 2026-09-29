@@ -17,7 +17,8 @@ calibrate_min_support(
   grid = c(5, 10, 20, 30, 50, 100),
   target = 0.7,
   min_series = 10L,
-  seed = 1L
+  seed = 1L,
+  weights = c("pooled", "observed")
 )
 ```
 
@@ -68,6 +69,11 @@ calibrate_min_support(
 
   Integer seed for the split. Default `1`.
 
+- weights:
+
+  Trend weighting, `"pooled"` (default) or `"observed"`; see
+  [`compute_share_trend()`](https://gmontaletti.github.io/skillviz/reference/compute_share_trend.md).
+
 ## Value
 
 A list with `tabella` (data.table with `n_min`, `n_serie`, `rho`) and
@@ -81,9 +87,9 @@ fixed `seed`; the global RNG state is restored). For each half the share
 panel is built and the slope of the last `window` periods is estimated
 as in
 [`compute_share_trend()`](https://gmontaletti.github.io/skillviz/reference/compute_share_trend.md)
-(no breaks, no drift). The support of a series is its average count per
-3 periods in the full sample over the window, \\3 \sum_t x_t / window\\,
-the same unit as the rolling count of
+(no breaks, no drift, the chosen `weights`). The support of a series is
+its average count per 3 periods in the full sample over the window, \\3
+\sum_t x_t / window\\, the same unit as the rolling count of
 [`detect_skill_onset()`](https://gmontaletti.github.io/skillviz/reference/detect_skill_onset.md).
 For each value of `grid`, the Spearman correlation between the
 half-sample slopes of series with support at least that value is
@@ -104,10 +110,10 @@ inc <- data.table::rbindlist(lapply(1:12, function(m) {
 }))
 calibrate_min_support(inc, window = 12, grid = c(5, 20), min_series = 5)
 #> $tabella
-#>    n_min n_serie      rho
-#>    <num>   <int>    <num>
-#> 1:     5      12 0.958042
-#> 2:    20      12 0.958042
+#>    n_min n_serie       rho
+#>    <num>   <int>     <num>
+#> 1:     5      12 0.9440559
+#> 2:    20      12 0.9440559
 #> 
 #> $n_min
 #> [1] 5

@@ -15,7 +15,8 @@ compute_share_acceleration(
   window = 12L,
   end = NULL,
   break_times = NULL,
-  drift = NULL
+  drift = NULL,
+  weights = c("pooled", "observed")
 )
 ```
 
@@ -64,6 +65,13 @@ compute_share_acceleration(
   [`compute_drift_index()`](https://gmontaletti.github.io/skillviz/reference/compute_drift_index.md).
   Default `NULL` (no drift correction).
 
+- weights:
+
+  Weighting of the least squares: `"pooled"` (default, binomial variance
+  at the pooled share of the series in the window) or `"observed"`
+  (variance at the observed count of each period, the behaviour of
+  version 0.6.0). See Details.
+
 ## Value
 
 A data.table with `key_cols`, `pendenza_recente`, `pendenza_precedente`,
@@ -72,11 +80,13 @@ A data.table with `key_cols`, `pendenza_recente`, `pendenza_precedente`,
 ## Details
 
 Both slopes are estimated as in
-[`compute_share_trend()`](https://gmontaletti.github.io/skillviz/reference/compute_share_trend.md).
-The acceleration is \\a = \beta\_{recent} - \beta\_{previous}\\ with
-\\SE(a) = \sqrt{SE\_{recent}^2 + SE\_{previous}^2}\\ (the two windows
-are disjoint), \\z = a / SE(a)\\, a two-sided normal p-value and a
-BH-adjusted p-value over the series of the call.
+[`compute_share_trend()`](https://gmontaletti.github.io/skillviz/reference/compute_share_trend.md),
+with the same `weights` option; pooled weights use the pooled share of
+each window. The acceleration is \\a = \beta\_{recent} -
+\beta\_{previous}\\ with \\SE(a) = \sqrt{SE\_{recent}^2 +
+SE\_{previous}^2}\\ (the two windows are disjoint), \\z = a / SE(a)\\, a
+two-sided normal p-value and a BH-adjusted p-value over the series of
+the call.
 
 ## Examples
 
@@ -195,10 +205,10 @@ compute_share_acceleration(panel, key_cols = "skill_id")
 #> Key: <skill_id>
 #>    skill_id pendenza_recente pendenza_precedente accelerazione          se
 #>      <char>            <num>               <num>         <num>       <num>
-#> 1:        a       0.08015222         0.006368103    0.07378412 0.009925526
-#> 2:        b       0.08034449        -0.005781780    0.08612627 0.008319623
+#> 1:        a       0.08099568         0.006188876    0.07480680 0.009647741
+#> 2:        b       0.08220994        -0.005564075    0.08777401 0.008383171
 #>            z      p_value        p_adj
 #>        <num>        <num>        <num>
-#> 1:  7.433774 1.055419e-13 1.055419e-13
-#> 2: 10.352184 4.090450e-25 8.180899e-25
+#> 1:  7.753815 8.917209e-15 8.917209e-15
+#> 2: 10.470264 1.183131e-25 2.366262e-25
 ```

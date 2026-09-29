@@ -13,7 +13,7 @@ closed-form and vectorised over series."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -57,7 +57,8 @@ closed-form and vectorised over series.</p>
 <span>  window <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  end <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  break_times <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  drift <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  drift <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  weights <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"pooled"</span>, <span class="st">"observed"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -108,6 +109,13 @@ a step dummy. Default <code>NULL</code>.</p></dd>
 as returned by <code><a href="compute_drift_index.html">compute_drift_index()</a></code>. Default <code>NULL</code> (no drift
 correction).</p></dd>
 
+
+<dt id="arg-weights">weights<a class="anchor" aria-label="anchor" href="#arg-weights"></a></dt>
+<dd><p>Weighting of the least squares: <code>"pooled"</code> (default,
+binomial variance at the pooled share of the series in the window) or
+<code>"observed"</code> (variance at the observed count of each period, the
+behaviour of version 0.6.0). See Details.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -120,9 +128,21 @@ factor), <code>pendenza_lorda</code> (slope before drift correction) and
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>For each series the response is
-\(y_t = \mathrm{logit}((x_t + 0.5)/(n_t + 1))\) with weights
-\(w_t = 1 / (1/(x_t + 0.5) + 1/(n_t - x_t + 0.5))\), the inverse of
-the approximate sampling variance of the empirical logit. Break
+\(y_t = \mathrm{logit}((x_t + 0.5)/(n_t + 1))\), weighted by the
+inverse of the approximate sampling variance of the empirical logit.
+With <code>weights = "pooled"</code> (default) the variance is evaluated at the
+pooled share of the series over the window,
+\(\bar p = \sum_t x_t / \sum_t n_t\):
+\(w_t = 1 / (1/(n_t \bar p + 0.5) + 1/(n_t (1 - \bar p) + 0.5))\),
+where the 0.5 terms keep the weights finite when \(\bar p\) is 0 or 1.
+With <code>weights = "observed"</code> it is evaluated at the observed count,
+\(w_t = 1 / (1/(x_t + 0.5) + 1/(n_t - x_t + 0.5))\). Observed weights
+correlate with the response: a month with \(x_t = 0\) weighs about
+0.5 whatever \(n_t\), while a month with a large count weighs about
+\(x_t\), so a series that spikes and then falls to zero keeps a large
+positive slope driven by the spike. Pooled weights depend only on
+\(n_t\) within a series and do not have this bias; on a series with
+constant share the two options coincide up to sampling noise. Break
 periods <code>break_times</code> add a step dummy \(1\{t \ge b\}\); together
 with the intercept they define segment-specific intercepts, so the
 slope is obtained after weighted centring of \(t\) and \(y\)
@@ -257,14 +277,14 @@ all series of the call, which therefore defines the testing family.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span>       &lt;char&gt;    &lt;int&gt; &lt;int&gt; &lt;int&gt;</span>
 <span class="r-in"><span><span class="fu">compute_share_trend</span><span class="op">(</span><span class="va">panel</span>, key_cols <span class="op">=</span> <span class="st">"skill_id"</span>, window <span class="op">=</span> <span class="fl">24</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Key: &lt;skill_id&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    skill_id n_mesi    pendenza          se          z      p_value        p_adj</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>      &lt;char&gt;  &lt;int&gt;       &lt;num&gt;       &lt;num&gt;      &lt;num&gt;        &lt;num&gt;        &lt;num&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1:        a     24 0.048173453 0.002407166 20.0125163 4.284646e-89 8.569291e-89</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2:        b     24 0.002158329 0.003064733  0.7042471 4.812789e-01 4.812789e-01</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    skill_id n_mesi    pendenza          se         z      p_value        p_adj</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>      &lt;char&gt;  &lt;int&gt;       &lt;num&gt;       &lt;num&gt;     &lt;num&gt;        &lt;num&gt;        &lt;num&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:        a     24 0.048939900 0.002322030 21.076339 1.311453e-98 2.622906e-98</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2:        b     24 0.002224338 0.003068162  0.724974 4.684680e-01 4.684680e-01</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      phi pendenza_lorda pendenza_drift</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    &lt;num&gt;          &lt;num&gt;          &lt;num&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1:     1    0.048173453              0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2:     1    0.002158329              0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:     1    0.048939900              0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2:     1    0.002224338              0</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

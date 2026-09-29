@@ -26,7 +26,8 @@ backtest_emergence(
   k = 50L,
   net_drift = FALSE,
   break_times = NULL,
-  indicators_fun = NULL
+  indicators_fun = NULL,
+  trend_weights = c("pooled", "observed")
 )
 ```
 
@@ -110,6 +111,13 @@ backtest_emergence(
   truncated at the origin (columns `key_cols`, `time_col`, `x_col`,
   `n_col`) and returning a data.table with `key_cols`, the `components`,
   `pendenza` and `p_adj`. Default `NULL` (built-in indicators).
+
+- trend_weights:
+
+  Weighting of the default trend and acceleration indicators, `"pooled"`
+  (default) or `"observed"`; see
+  [`compute_share_trend()`](https://gmontaletti.github.io/skillviz/reference/compute_share_trend.md).
+  Distinct from `weights_grid`, which weights the score components.
 
 ## Value
 

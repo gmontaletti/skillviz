@@ -17,7 +17,8 @@ compute_share_trend(
   window = NULL,
   end = NULL,
   break_times = NULL,
-  drift = NULL
+  drift = NULL,
+  weights = c("pooled", "observed")
 )
 ```
 
@@ -67,6 +68,13 @@ compute_share_trend(
   [`compute_drift_index()`](https://gmontaletti.github.io/skillviz/reference/compute_drift_index.md).
   Default `NULL` (no drift correction).
 
+- weights:
+
+  Weighting of the least squares: `"pooled"` (default, binomial variance
+  at the pooled share of the series in the window) or `"observed"`
+  (variance at the observed count of each period, the behaviour of
+  version 0.6.0). See Details.
+
 ## Value
 
 A data.table with one row per series: `key_cols`, `n_mesi` (periods
@@ -78,10 +86,21 @@ used), `pendenza` (drift-net slope per period on the logit scale), `se`,
 ## Details
 
 For each series the response is \\y_t = \mathrm{logit}((x_t +
-0.5)/(n_t + 1))\\ with weights \\w_t = 1 / (1/(x_t + 0.5) + 1/(n_t -
-x_t + 0.5))\\, the inverse of the approximate sampling variance of the
-empirical logit. Break periods `break_times` add a step dummy \\1\\t \ge
-b\\\\; together with the intercept they define segment-specific
+0.5)/(n_t + 1))\\, weighted by the inverse of the approximate sampling
+variance of the empirical logit. With `weights = "pooled"` (default) the
+variance is evaluated at the pooled share of the series over the window,
+\\\bar p = \sum_t x_t / \sum_t n_t\\: \\w_t = 1 / (1/(n_t \bar p +
+0.5) + 1/(n_t (1 - \bar p) + 0.5))\\, where the 0.5 terms keep the
+weights finite when \\\bar p\\ is 0 or 1. With `weights = "observed"` it
+is evaluated at the observed count, \\w_t = 1 / (1/(x_t + 0.5) +
+1/(n_t - x_t + 0.5))\\. Observed weights correlate with the response: a
+month with \\x_t = 0\\ weighs about 0.5 whatever \\n_t\\, while a month
+with a large count weighs about \\x_t\\, so a series that spikes and
+then falls to zero keeps a large positive slope driven by the spike.
+Pooled weights depend only on \\n_t\\ within a series and do not have
+this bias; on a series with constant share the two options coincide up
+to sampling noise. Break periods `break_times` add a step dummy \\1\\t
+\ge b\\\\; together with the intercept they define segment-specific
 intercepts, so the slope is obtained after weighted centring of \\t\\
 and \\y\\ within each segment (Frisch-Waugh-Lovell).
 
@@ -216,12 +235,12 @@ panel[, x := rbinom(.N, n, plogis(-3 + ifelse(skill_id == "a", 0.05, 0) *
 #>       <char>    <int> <int> <int>
 compute_share_trend(panel, key_cols = "skill_id", window = 24)
 #> Key: <skill_id>
-#>    skill_id n_mesi    pendenza          se          z      p_value        p_adj
-#>      <char>  <int>       <num>       <num>      <num>        <num>        <num>
-#> 1:        a     24 0.048173453 0.002407166 20.0125163 4.284646e-89 8.569291e-89
-#> 2:        b     24 0.002158329 0.003064733  0.7042471 4.812789e-01 4.812789e-01
+#>    skill_id n_mesi    pendenza          se         z      p_value        p_adj
+#>      <char>  <int>       <num>       <num>     <num>        <num>        <num>
+#> 1:        a     24 0.048939900 0.002322030 21.076339 1.311453e-98 2.622906e-98
+#> 2:        b     24 0.002224338 0.003068162  0.724974 4.684680e-01 4.684680e-01
 #>      phi pendenza_lorda pendenza_drift
 #>    <num>          <num>          <num>
-#> 1:     1    0.048173453              0
-#> 2:     1    0.002158329              0
+#> 1:     1    0.048939900              0
+#> 2:     1    0.002224338              0
 ```

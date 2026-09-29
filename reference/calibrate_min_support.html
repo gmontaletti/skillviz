@@ -11,7 +11,7 @@ halves of the postings."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.6.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -55,7 +55,8 @@ halves of the postings.</p>
 <span>  grid <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">5</span>, <span class="fl">10</span>, <span class="fl">20</span>, <span class="fl">30</span>, <span class="fl">50</span>, <span class="fl">100</span><span class="op">)</span>,</span>
 <span>  target <span class="op">=</span> <span class="fl">0.7</span>,</span>
 <span>  min_series <span class="op">=</span> <span class="fl">10L</span>,</span>
-<span>  seed <span class="op">=</span> <span class="fl">1L</span></span>
+<span>  seed <span class="op">=</span> <span class="fl">1L</span>,</span>
+<span>  weights <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"pooled"</span>, <span class="st">"observed"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -109,6 +110,11 @@ Default <code>10</code>.</p></dd>
 <dt id="arg-seed">seed<a class="anchor" aria-label="anchor" href="#arg-seed"></a></dt>
 <dd><p>Integer seed for the split. Default <code>1</code>.</p></dd>
 
+
+<dt id="arg-weights">weights<a class="anchor" aria-label="anchor" href="#arg-weights"></a></dt>
+<dd><p>Trend weighting, <code>"pooled"</code> (default) or <code>"observed"</code>;
+see <code><a href="compute_share_trend.html">compute_share_trend()</a></code>.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -121,7 +127,8 @@ value reaches <code>target</code>).</p>
     <p>Postings are split at random into two halves (by posting id, with a
 fixed <code>seed</code>; the global RNG state is restored). For each half the
 share panel is built and the slope of the last <code>window</code> periods is
-estimated as in <code><a href="compute_share_trend.html">compute_share_trend()</a></code> (no breaks, no drift). The
+estimated as in <code><a href="compute_share_trend.html">compute_share_trend()</a></code> (no breaks, no drift, the
+chosen <code>weights</code>). The
 support of a series is its average count per 3 periods in the full
 sample over the window, \(3 \sum_t x_t / window\), the same unit
 as the rolling count of <code><a href="detect_skill_onset.html">detect_skill_onset()</a></code>. For each value of
@@ -144,10 +151,10 @@ at least <code>min_series</code> series.</p>
 <span class="r-in"><span><span class="op">}</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">calibrate_min_support</span><span class="op">(</span><span class="va">inc</span>, window <span class="op">=</span> <span class="fl">12</span>, grid <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">5</span>, <span class="fl">20</span><span class="op">)</span>, min_series <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $tabella</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    n_min n_serie      rho</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    &lt;num&gt;   &lt;int&gt;    &lt;num&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1:     5      12 0.958042</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2:    20      12 0.958042</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    n_min n_serie       rho</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    &lt;num&gt;   &lt;int&gt;     &lt;num&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:     5      12 0.9440559</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2:    20      12 0.9440559</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $n_min</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 5</span>
