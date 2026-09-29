@@ -109,6 +109,62 @@ test_that("compute_share_trend validates input", {
   expect_error(compute_share_trend(bad, "skill_id"), "must not exceed")
 })
 
+# 2b. trend weights -----
+
+test_that("pooled weights do not reward a spike that collapses to zero", {
+  panel <- data.table::data.table(
+    skill_id = "k",
+    mese_idx = 1:24,
+    n = 5000,
+    x = c(rep(0, 12), 400, 900, 1200, rep(0, 9))
+  )
+  pooled <- compute_share_trend(panel, "skill_id")
+  expect_true(pooled$pendenza < 0 || pooled$p_adj >= 0.05)
+
+  # observed weights reproduce the 0.6.0 estimator, a plain weighted lm()
+  observed <- compute_share_trend(panel, "skill_id", weights = "observed")
+  d <- data.table::copy(panel)
+  d[, `:=`(
+    y = stats::qlogis((x + 0.5) / (n + 1)),
+    w = 1 / (1 / (x + 0.5) + 1 / (n - x + 0.5))
+  )]
+  ref <- unname(stats::coef(stats::lm(y ~ mese_idx, d, weights = w))[2L])
+  expect_equal(observed$pendenza, ref, tolerance = 1e-8)
+  expect_true(observed$pendenza > 0.3 && observed$p_adj < 0.05)
+
+  acc_obs <- compute_share_acceleration(panel, "skill_id", weights = "observed")
+  acc_pool <- compute_share_acceleration(panel, "skill_id")
+  expect_false(isTRUE(all.equal(acc_obs$accelerazione, acc_pool$accelerazione)))
+})
+
+test_that("pooled and observed weights agree on a constant share", {
+  panel <- sim_panel(betas = rep(0, 6), n = 1e6L)
+  pooled <- compute_share_trend(panel, "skill_id")
+  observed <- compute_share_trend(panel, "skill_id", weights = "observed")
+  expect_lt(max(abs(pooled$pendenza - observed$pendenza)), 1e-4)
+  expect_lt(max(abs(pooled$se / observed$se - 1)), 0.01)
+  acc_p <- compute_share_acceleration(panel, "skill_id")
+  acc_o <- compute_share_acceleration(panel, "skill_id", weights = "observed")
+  expect_lt(max(abs(acc_p$accelerazione - acc_o$accelerazione)), 1e-4)
+})
+
+test_that("trend functions reject an unknown weights value", {
+  panel <- sim_panel(betas = 0, n_months = 24)
+  expect_error(compute_share_trend(panel, "skill_id", weights = "equal"),
+    "`weights`")
+  expect_error(
+    compute_share_acceleration(panel, "skill_id", weights = c("a", "b")),
+    "`weights`"
+  )
+  expect_error(
+    backtest_emergence(panel, "skill_id", origins = 12, horizon = 6,
+      window = 12, trend_weights = "raw"),
+    "`weights`"
+  )
+  inc <- data.table::data.table(general_id = 1, mese_idx = 1, skill_id = "a")
+  expect_error(calibrate_min_support(inc, weights = "raw"), "`weights`")
+})
+
 # 3. compute_yoy_ratio -----
 
 test_that("compute_yoy_ratio returns ratio and Katz interval", {

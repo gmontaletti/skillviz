@@ -22,7 +22,8 @@ backtest_emergence(
   k = 50L,
   net_drift = FALSE,
   break_times = NULL,
-  indicators_fun = NULL
+  indicators_fun = NULL,
+  trend_weights = c("pooled", "observed")
 )
 }
 \arguments{
@@ -71,6 +72,11 @@ the standardised panel truncated at the origin (columns
 \code{key_cols}, \code{time_col}, \code{x_col}, \code{n_col}) and returning a
 data.table with \code{key_cols}, the \code{components}, \code{pendenza} and
 \code{p_adj}. Default \code{NULL} (built-in indicators).}
+
+\item{trend_weights}{Weighting of the default trend and acceleration
+indicators, \code{"pooled"} (default) or \code{"observed"}; see
+\code{\link[=compute_share_trend]{compute_share_trend()}}. Distinct from \code{weights_grid}, which weights
+the score components.}
 }
 \value{
 A list with:

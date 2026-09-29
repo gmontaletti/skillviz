@@ -1,3 +1,29 @@
+# skillviz 0.6.1
+
+## Pesi della pendenza delle quote
+
+* `compute_share_trend()` e `compute_share_acceleration()` hanno un nuovo
+  argomento `weights`. Con il valore predefinito `"pooled"` ogni mese è pesato
+  con la varianza binomiale calcolata sulla quota complessiva della serie nella
+  finestra, `w = 1 / (1 / (n p + 0,5) + 1 / (n (1 - p) + 0,5))` con
+  `p = somma(x) / somma(n)`. Con `"observed"` si ottiene il comportamento della
+  versione 0.6.0, in cui il peso dipende dal conteggio osservato del mese.
+
+* Con i pesi osservati un mese con conteggio zero pesa circa 0,5 qualunque sia
+  il denominatore, mentre un mese con conteggio elevato pesa circa quanto il
+  conteggio: una competenza con un picco seguito da mesi a zero conservava una
+  pendenza positiva ampia e significativa e poteva risultare Emergente. Con i
+  pesi della quota complessiva la pendenza di queste serie è negativa o non
+  significativa; sulle serie a quota costante le due opzioni danno risultati
+  equivalenti.
+
+* Il cambio del valore predefinito modifica i risultati di
+  `compute_share_trend()`, `compute_share_acceleration()`,
+  `calibrate_min_support()` (nuovo argomento `weights`) e
+  `backtest_emergence()` (nuovo argomento `trend_weights`). Queste funzioni
+  sono state introdotte nella 0.6.0 e le usa soltanto la nuova pipeline delle
+  competenze emergenti, i cui risultati non sono ancora stati pubblicati.
+
 # skillviz 0.6.0
 
 ## Competenze emergenti

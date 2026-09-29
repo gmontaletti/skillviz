@@ -243,10 +243,19 @@
 #' @param t_from,t_to Window bounds (inclusive).
 #' @param break_times Numeric vector of break periods or `NULL`.
 #' @param drift data.table with `.t` and `drift_livello`, or `NULL`.
+#' @param weights `"pooled"` or `"observed"` (see [compute_share_trend()]).
 #' @return A data.table with one row per key.
 #' @keywords internal
 #' @noRd
-.em_trend_core <- function(dt, key_cols, t_from, t_to, break_times, drift) {
+.em_trend_core <- function(
+  dt,
+  key_cols,
+  t_from,
+  t_to,
+  break_times,
+  drift,
+  weights = "pooled"
+) {
   d <- dt[.t >= t_from & .t <= t_to & .n > 0]
   brk <- sort(unique(break_times))
 
@@ -255,10 +264,21 @@
   }
 
   d[, `:=`(
+    .t = as.numeric(.t),
+    .x = as.numeric(.x),
+    .n = as.numeric(.n)
+  )]
+  d[, `:=`(
     .y = stats::qlogis((.x + 0.5) / (.n + 1)),
-    .w = 1 / (1 / (.x + 0.5) + 1 / (.n - .x + 0.5)),
     .seg = seg_of(.t)
   )]
+  if (weights == "observed") {
+    d[, .w := 1 / (1 / (.x + 0.5) + 1 / (.n - .x + 0.5))]
+  } else {
+    # binomial variance at the pooled share of the series in the window
+    d[, .p := sum(.x) / sum(.n), by = key_cols]
+    d[, .w := 1 / (1 / (.n * .p + 0.5) + 1 / (.n * (1 - .p) + 0.5))]
+  }
   # Within-segment weighted centring = partialling out intercept and
   # step dummies (Frisch-Waugh-Lovell).
   d[,
@@ -353,6 +373,26 @@
   dd
 }
 
+#' Match the `weights` argument of the trend functions
+#'
+#' @param weights Character, `"pooled"` or `"observed"`.
+#' @param caller Calling function.
+#' @return The matched value.
+#' @keywords internal
+#' @noRd
+.em_match_weights <- function(weights, caller) {
+  choices <- c("pooled", "observed")
+  if (identical(weights, choices)) {
+    return("pooled")
+  }
+  if (!is.character(weights) || length(weights) != 1L ||
+    !weights %in% choices) {
+    stop(caller, ": `weights` must be \"pooled\" or \"observed\"",
+      call. = FALSE)
+  }
+  weights
+}
+
 # 1. compute_share_panel -----
 
 #' Monthly skill share panel from posting-level incidence
@@ -425,9 +465,21 @@ compute_share_panel <- function(
 #'
 #' @details
 #' For each series the response is
-#' \eqn{y_t = \mathrm{logit}((x_t + 0.5)/(n_t + 1))} with weights
-#' \eqn{w_t = 1 / (1/(x_t + 0.5) + 1/(n_t - x_t + 0.5))}, the inverse of
-#' the approximate sampling variance of the empirical logit. Break
+#' \eqn{y_t = \mathrm{logit}((x_t + 0.5)/(n_t + 1))}, weighted by the
+#' inverse of the approximate sampling variance of the empirical logit.
+#' With `weights = "pooled"` (default) the variance is evaluated at the
+#' pooled share of the series over the window,
+#' \eqn{\bar p = \sum_t x_t / \sum_t n_t}:
+#' \eqn{w_t = 1 / (1/(n_t \bar p + 0.5) + 1/(n_t (1 - \bar p) + 0.5))},
+#' where the 0.5 terms keep the weights finite when \eqn{\bar p} is 0 or 1.
+#' With `weights = "observed"` it is evaluated at the observed count,
+#' \eqn{w_t = 1 / (1/(x_t + 0.5) + 1/(n_t - x_t + 0.5))}. Observed weights
+#' correlate with the response: a month with \eqn{x_t = 0} weighs about
+#' 0.5 whatever \eqn{n_t}, while a month with a large count weighs about
+#' \eqn{x_t}, so a series that spikes and then falls to zero keeps a large
+#' positive slope driven by the spike. Pooled weights depend only on
+#' \eqn{n_t} within a series and do not have this bias; on a series with
+#' constant share the two options coincide up to sampling noise. Break
 #' periods `break_times` add a step dummy \eqn{1\{t \ge b\}}; together
 #' with the intercept they define segment-specific intercepts, so the
 #' slope is obtained after weighted centring of \eqn{t} and \eqn{y}
@@ -465,6 +517,10 @@ compute_share_panel <- function(
 #' @param drift Optional data.table with `time_col` and `drift_livello`,
 #'   as returned by [compute_drift_index()]. Default `NULL` (no drift
 #'   correction).
+#' @param weights Weighting of the least squares: `"pooled"` (default,
+#'   binomial variance at the pooled share of the series in the window) or
+#'   `"observed"` (variance at the observed count of each period, the
+#'   behaviour of version 0.6.0). See Details.
 #' @return A data.table with one row per series: `key_cols`, `n_mesi`
 #'   (periods used), `pendenza` (drift-net slope per period on the logit
 #'   scale), `se`, `z`, `p_value`, `p_adj` (BH), `phi` (overdispersion
@@ -487,9 +543,11 @@ compute_share_trend <- function(
   window = NULL,
   end = NULL,
   break_times = NULL,
-  drift = NULL
+  drift = NULL,
+  weights = c("pooled", "observed")
 ) {
   caller <- "compute_share_trend"
+  weights <- .em_match_weights(weights, caller)
   dt <- .em_prepare(panel, key_cols, time_col, x_col, n_col, caller)
   if (
     !is.null(window) &&
@@ -510,7 +568,7 @@ compute_share_trend <- function(
     end <- max(dt$.t)
   }
   t_from <- if (is.null(window)) min(dt$.t) else end - window + 1
-  .em_trend_core(dt, key_cols, t_from, end, break_times, dd)
+  .em_trend_core(dt, key_cols, t_from, end, break_times, dd, weights)
 }
 
 # 3. compute_yoy_ratio -----
@@ -634,7 +692,8 @@ compute_yoy_ratio <- function(
 #' and the slope of the `window` periods before them.
 #'
 #' @details
-#' Both slopes are estimated as in [compute_share_trend()]. The
+#' Both slopes are estimated as in [compute_share_trend()], with the same
+#' `weights` option; pooled weights use the pooled share of each window. The
 #' acceleration is \eqn{a = \beta_{recent} - \beta_{previous}} with
 #' \eqn{SE(a) = \sqrt{SE_{recent}^2 + SE_{previous}^2}} (the two windows
 #' are disjoint), \eqn{z = a / SE(a)}, a two-sided normal p-value and a
@@ -661,9 +720,11 @@ compute_share_acceleration <- function(
   window = 12L,
   end = NULL,
   break_times = NULL,
-  drift = NULL
+  drift = NULL,
+  weights = c("pooled", "observed")
 ) {
   caller <- "compute_share_acceleration"
+  weights <- .em_match_weights(weights, caller)
   dt <- .em_prepare(panel, key_cols, time_col, x_col, n_col, caller)
   if (!is.numeric(window) || length(window) != 1L || window < 3) {
     stop(caller, ": `window` must be a single number >= 3", call. = FALSE)
@@ -672,14 +733,23 @@ compute_share_acceleration <- function(
   if (is.null(end)) {
     end <- max(dt$.t)
   }
-  rec <- .em_trend_core(dt, key_cols, end - window + 1, end, break_times, dd)
+  rec <- .em_trend_core(
+    dt,
+    key_cols,
+    end - window + 1,
+    end,
+    break_times,
+    dd,
+    weights
+  )
   prv <- .em_trend_core(
     dt,
     key_cols,
     end - 2 * window + 1,
     end - window,
     break_times,
-    dd
+    dd,
+    weights
   )
 
   res <- merge(
@@ -1274,7 +1344,8 @@ detect_taxonomy_drift <- function(
 #' Postings are split at random into two halves (by posting id, with a
 #' fixed `seed`; the global RNG state is restored). For each half the
 #' share panel is built and the slope of the last `window` periods is
-#' estimated as in [compute_share_trend()] (no breaks, no drift). The
+#' estimated as in [compute_share_trend()] (no breaks, no drift, the
+#' chosen `weights`). The
 #' support of a series is its average count per 3 periods in the full
 #' sample over the window, \eqn{3 \sum_t x_t / window}, the same unit
 #' as the rolling count of [detect_skill_onset()]. For each value of
@@ -1291,6 +1362,8 @@ detect_taxonomy_drift <- function(
 #' @param min_series Minimum number of series for a valid correlation.
 #'   Default `10`.
 #' @param seed Integer seed for the split. Default `1`.
+#' @param weights Trend weighting, `"pooled"` (default) or `"observed"`;
+#'   see [compute_share_trend()].
 #' @return A list with `tabella` (data.table with `n_min`, `n_serie`,
 #'   `rho`) and `n_min` (chosen threshold, `NA` with a warning when no
 #'   value reaches `target`).
@@ -1316,9 +1389,11 @@ calibrate_min_support <- function(
   grid = c(5, 10, 20, 30, 50, 100),
   target = 0.7,
   min_series = 10L,
-  seed = 1L
+  seed = 1L,
+  weights = c("pooled", "observed")
 ) {
   caller <- "calibrate_min_support"
+  weights <- .em_match_weights(weights, caller)
   if (!is.data.frame(incidence)) {
     stop(caller, ": `incidence` must be a data.frame", call. = FALSE)
   }
@@ -1361,7 +1436,7 @@ calibrate_min_support <- function(
       TRUE
     )
     p <- .em_prepare(p, keys, time_col, "x", "n", caller)
-    .em_trend_core(p, keys, t_from, t_end, NULL, NULL)[,
+    .em_trend_core(p, keys, t_from, t_end, NULL, NULL, weights)[,
       c(keys, "pendenza"),
       with = FALSE
     ]
@@ -1658,6 +1733,10 @@ score_emergence <- function(
 #' @param k Size of the top list for precision@k. Default `50`.
 #' @param net_drift Logical; recompute and net out the drift index at
 #'   each origin. Default `FALSE`.
+#' @param trend_weights Weighting of the default trend and acceleration
+#'   indicators, `"pooled"` (default) or `"observed"`; see
+#'   [compute_share_trend()]. Distinct from `weights_grid`, which weights
+#'   the score components.
 #' @param indicators_fun Optional function `f(panel, origin)` receiving
 #'   the standardised panel truncated at the origin (columns
 #'   `key_cols`, `time_col`, `x_col`, `n_col`) and returning a
@@ -1697,9 +1776,11 @@ backtest_emergence <- function(
   k = 50L,
   net_drift = FALSE,
   break_times = NULL,
-  indicators_fun = NULL
+  indicators_fun = NULL,
+  trend_weights = c("pooled", "observed")
 ) {
   caller <- "backtest_emergence"
+  trend_weights <- .em_match_weights(trend_weights, caller)
   dt <- .em_prepare(panel, key_cols, time_col, x_col, n_col, caller)
   if (!is.numeric(origins) || length(origins) == 0L) {
     stop(caller, ": `origins` must be a numeric vector", call. = FALSE)
@@ -1740,7 +1821,8 @@ backtest_emergence <- function(
         window,
         min_support,
         break_times,
-        net_drift
+        net_drift,
+        trend_weights
       )
     } else {
       data.table::as.data.table(indicators_fun(past, o))
@@ -1861,7 +1943,8 @@ backtest_emergence <- function(
   window,
   min_support,
   break_times,
-  net_drift
+  net_drift,
+  trend_weights = "pooled"
 ) {
   drift <- if (net_drift) {
     compute_drift_index(past, key_cols, time_col, x_col, n_col)
@@ -1877,7 +1960,8 @@ backtest_emergence <- function(
     window = window,
     end = origin,
     break_times = break_times,
-    drift = drift
+    drift = drift,
+    weights = trend_weights
   )
   acc <- compute_share_acceleration(
     past,
@@ -1888,7 +1972,8 @@ backtest_emergence <- function(
     window = max(3L, floor(window / 2)),
     end = origin,
     break_times = break_times,
-    drift = drift
+    drift = drift,
+    weights = trend_weights
   )
   ons <- detect_skill_onset(
     past,

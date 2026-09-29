@@ -13,7 +13,8 @@ compute_share_trend(
   window = NULL,
   end = NULL,
   break_times = NULL,
-  drift = NULL
+  drift = NULL,
+  weights = c("pooled", "observed")
 )
 }
 \arguments{
@@ -42,6 +43,11 @@ a step dummy. Default \code{NULL}.}
 \item{drift}{Optional data.table with \code{time_col} and \code{drift_livello},
 as returned by \code{\link[=compute_drift_index]{compute_drift_index()}}. Default \code{NULL} (no drift
 correction).}
+
+\item{weights}{Weighting of the least squares: \code{"pooled"} (default,
+binomial variance at the pooled share of the series in the window) or
+\code{"observed"} (variance at the observed count of each period, the
+behaviour of version 0.6.0). See Details.}
 }
 \value{
 A data.table with one row per series: \code{key_cols}, \code{n_mesi}
@@ -58,9 +64,21 @@ closed-form and vectorised over series.
 }
 \details{
 For each series the response is
-\eqn{y_t = \mathrm{logit}((x_t + 0.5)/(n_t + 1))} with weights
-\eqn{w_t = 1 / (1/(x_t + 0.5) + 1/(n_t - x_t + 0.5))}, the inverse of
-the approximate sampling variance of the empirical logit. Break
+\eqn{y_t = \mathrm{logit}((x_t + 0.5)/(n_t + 1))}, weighted by the
+inverse of the approximate sampling variance of the empirical logit.
+With \code{weights = "pooled"} (default) the variance is evaluated at the
+pooled share of the series over the window,
+\eqn{\bar p = \sum_t x_t / \sum_t n_t}:
+\eqn{w_t = 1 / (1/(n_t \bar p + 0.5) + 1/(n_t (1 - \bar p) + 0.5))},
+where the 0.5 terms keep the weights finite when \eqn{\bar p} is 0 or 1.
+With \code{weights = "observed"} it is evaluated at the observed count,
+\eqn{w_t = 1 / (1/(x_t + 0.5) + 1/(n_t - x_t + 0.5))}. Observed weights
+correlate with the response: a month with \eqn{x_t = 0} weighs about
+0.5 whatever \eqn{n_t}, while a month with a large count weighs about
+\eqn{x_t}, so a series that spikes and then falls to zero keeps a large
+positive slope driven by the spike. Pooled weights depend only on
+\eqn{n_t} within a series and do not have this bias; on a series with
+constant share the two options coincide up to sampling noise. Break
 periods \code{break_times} add a step dummy \eqn{1\{t \ge b\}}; together
 with the intercept they define segment-specific intercepts, so the
 slope is obtained after weighted centring of \eqn{t} and \eqn{y}

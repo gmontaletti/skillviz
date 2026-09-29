@@ -13,7 +13,8 @@ compute_share_acceleration(
   window = 12L,
   end = NULL,
   break_times = NULL,
-  drift = NULL
+  drift = NULL,
+  weights = c("pooled", "observed")
 )
 }
 \arguments{
@@ -40,6 +41,11 @@ a step dummy. Default \code{NULL}.}
 \item{drift}{Optional data.table with \code{time_col} and \code{drift_livello},
 as returned by \code{\link[=compute_drift_index]{compute_drift_index()}}. Default \code{NULL} (no drift
 correction).}
+
+\item{weights}{Weighting of the least squares: \code{"pooled"} (default,
+binomial variance at the pooled share of the series in the window) or
+\code{"observed"} (variance at the observed count of each period, the
+behaviour of version 0.6.0). See Details.}
 }
 \value{
 A data.table with \code{key_cols}, \code{pendenza_recente},
@@ -51,7 +57,8 @@ Difference between the drift-net slope of the last \code{window} periods
 and the slope of the \code{window} periods before them.
 }
 \details{
-Both slopes are estimated as in \code{\link[=compute_share_trend]{compute_share_trend()}}. The
+Both slopes are estimated as in \code{\link[=compute_share_trend]{compute_share_trend()}}, with the same
+\code{weights} option; pooled weights use the pooled share of each window. The
 acceleration is \eqn{a = \beta_{recent} - \beta_{previous}} with
 \eqn{SE(a) = \sqrt{SE_{recent}^2 + SE_{previous}^2}} (the two windows
 are disjoint), \eqn{z = a / SE(a)}, a two-sided normal p-value and a

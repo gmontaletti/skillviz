@@ -14,7 +14,8 @@ calibrate_min_support(
   grid = c(5, 10, 20, 30, 50, 100),
   target = 0.7,
   min_series = 10L,
-  seed = 1L
+  seed = 1L,
+  weights = c("pooled", "observed")
 )
 }
 \arguments{
@@ -44,6 +45,9 @@ Default \code{"mese_idx"}.}
 Default \code{10}.}
 
 \item{seed}{Integer seed for the split. Default \code{1}.}
+
+\item{weights}{Trend weighting, \code{"pooled"} (default) or \code{"observed"};
+see \code{\link[=compute_share_trend]{compute_share_trend()}}.}
 }
 \value{
 A list with \code{tabella} (data.table with \code{n_min}, \code{n_serie},
@@ -59,7 +63,8 @@ halves of the postings.
 Postings are split at random into two halves (by posting id, with a
 fixed \code{seed}; the global RNG state is restored). For each half the
 share panel is built and the slope of the last \code{window} periods is
-estimated as in \code{\link[=compute_share_trend]{compute_share_trend()}} (no breaks, no drift). The
+estimated as in \code{\link[=compute_share_trend]{compute_share_trend()}} (no breaks, no drift, the
+chosen \code{weights}). The
 support of a series is its average count per 3 periods in the full
 sample over the window, \eqn{3 \sum_t x_t / window}, the same unit
 as the rolling count of \code{\link[=detect_skill_onset]{detect_skill_onset()}}. For each value of
