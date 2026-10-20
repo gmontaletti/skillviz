@@ -1155,7 +1155,10 @@ main <- function() {
   # -- assemble and check --
   out <- assemble(postings, list(pred_knn, pred_xgb))
   if (d$mode == "incremental") {
-    out <- out[year_grab_date * 100L + month_grab_date %in% d$months]
+    # Parentheses required: %in% binds tighter than * and +, so without them
+    # the index is year * 100 + (month %in% months), a vector of row numbers
+    # out of range, and every row comes back NA.
+    out <- out[(year_grab_date * 100L + month_grab_date) %in% d$months]
     reconcile(out, postings[ym %in% d$months])
   } else {
     reconcile(out, postings)
