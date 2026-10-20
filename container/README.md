@@ -142,9 +142,17 @@ Decided by comparing the months in the source against those already in the targe
 Incremental runs still train on every labelled row in the window; only the
 *prediction* is restricted to the new months.
 
-Both writes are transactional and idempotent. Full builds into a `_new` table and
-swaps it in, so readers never see a half-built table; incremental deletes the
+Both writes are transactional and idempotent. Full builds into a `_new` table,
+then, in one transaction, truncates the live table and copies the rows in, so
+readers never see a half-built table. The live table is never dropped:
+materialised views read it (`public.mv1_lightcast_annunci_e12`,
+`mv2_lightcast_annunci_e12`), and `DROP TABLE` would be refused. Only on a first
+run, with no live table, is `_new` renamed into place. Incremental deletes the
 target months before appending, so a re-run replaces rather than duplicates.
+
+Neither write refreshes the materialised views that read the table. Run
+`REFRESH MATERIALIZED VIEW` on them after each write; the container does not,
+because it does not own them.
 
 ## Exit codes
 

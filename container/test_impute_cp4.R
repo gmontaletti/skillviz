@@ -174,6 +174,72 @@ check(
   )
 )
 
+cat("\n== write_full keeps the live table and its dependants ==\n")
+# DuckDB stands in for Postgres: TRUNCATE, INSERT ... SELECT and a view on the
+# live table behave alike. ALTER TABLE ... ADD CONSTRAINT does not exist in
+# DuckDB, so add_constraints() is stubbed; .die() raises instead of quitting.
+if (requireNamespace("duckdb", quietly = TRUE)) {
+  assign("add_constraints", function(...) invisible(NULL), envir = env)
+  assign(
+    ".die",
+    function(status, ...) stop("die: ", paste0(..., collapse = "")),
+    envir = env
+  )
+  write_full <- get("write_full", envir = env)
+  dcon <- DBI::dbConnect(duckdb::duckdb())
+  DBI::dbExecute(dcon, "CREATE SCHEMA staging")
+  rows <- function(n, cp4) {
+    data.table(
+      general_id = as.numeric(seq_len(n)),
+      year_grab_date = 2026L,
+      month_grab_date = 6L,
+      cp2021_id_level_4 = cp4,
+      cp4_imputed = 0L
+    )
+  }
+
+  write_full(dcon, rows(3L, "1.1.1.1"), "staging", "gm_test")
+  check(
+    "first run renames _new into place",
+    DBI::dbGetQuery(dcon, "SELECT count(*) n FROM staging.gm_test")$n == 3L
+  )
+
+  DBI::dbExecute(
+    dcon,
+    "CREATE VIEW staging.v_test AS SELECT * FROM staging.gm_test"
+  )
+  write_full(dcon, rows(5L, "2.2.2.2"), "staging", "gm_test")
+  v <- DBI::dbGetQuery(dcon, "SELECT * FROM staging.v_test")
+  check(
+    "second run replaces the rows, seen through the view",
+    nrow(v) == 5L && all(v$cp2021_id_level_4 == "2.2.2.2")
+  )
+  check(
+    "staging table is removed after the copy",
+    !DBI::dbExistsTable(
+      dcon,
+      DBI::Id(schema = "staging", table = "gm_test_new")
+    )
+  )
+
+  extra <- rows(2L, "3.3.3.3")[, nuova := 1L]
+  failed <- tryCatch(
+    {
+      write_full(dcon, extra, "staging", "gm_test")
+      FALSE
+    },
+    error = function(e) grepl("^die: full write aborted", conditionMessage(e))
+  )
+  v <- DBI::dbGetQuery(dcon, "SELECT * FROM staging.v_test")
+  check(
+    "a column the live table lacks aborts and keeps the old rows",
+    failed && nrow(v) == 5L && all(v$cp2021_id_level_4 == "2.2.2.2")
+  )
+  DBI::dbDisconnect(dcon, shutdown = TRUE)
+} else {
+  cat("  skip  duckdb not installed\n")
+}
+
 cat(sprintf("\n%d ok, %d failed\n", ok, fail))
 if (fail > 0L) {
   quit(status = 1L, save = "no")

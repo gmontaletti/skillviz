@@ -829,48 +829,99 @@ add_constraints <- function(con, schema, table, nm) {
   )
 }
 
+# The live table is never dropped. Materialised views read it (in production
+# public.mv1_lightcast_annunci_e12 and mv2_lightcast_annunci_e12, and through
+# them further views), so DROP TABLE without CASCADE is refused and every full
+# run rolled back; with CASCADE it would destroy those views. When the table
+# exists, its rows are replaced in place instead -- TRUNCATE plus INSERT ...
+# SELECT from the staging table, in one transaction -- so it keeps its OID,
+# its constraints and its dependants. Postgres runs TRUNCATE inside a
+# transaction, so a failure leaves the old rows in place. The dependants are
+# not refreshed here: REFRESH MATERIALIZED VIEW belongs to whoever owns them.
+# Only on a first run, with no live table, is the staging table renamed into
+# place, carrying the constraints added by add_constraints().
 write_full <- function(con, out, schema, table) {
   staging_tbl <- paste0(table, "_new")
   if (table_exists(con, schema, staging_tbl)) {
     DBI::dbRemoveTable(con, target_id(schema, staging_tbl))
   }
-  nm <- build_names(table, format(Sys.time(), "%Y%m%d%H%M%S"))
   .info("writing ", nrow(out), " rows to ", schema, ".", staging_tbl)
   DBI::dbWriteTable(con, target_id(schema, staging_tbl), out, overwrite = TRUE)
-  add_constraints(con, schema, staging_tbl, nm)
 
   s <- qi(con, schema)
+  t <- qi(con, table)
+  st <- qi(con, staging_tbl)
+  replace_rows <- table_exists(con, schema, table)
+  if (!replace_rows) {
+    add_constraints(
+      con,
+      schema,
+      staging_tbl,
+      build_names(table, format(Sys.time(), "%Y%m%d%H%M%S"))
+    )
+  }
+  # Columns named explicitly: INSERT ... SELECT * would match by position, and
+  # a column added or reordered in the live table would shift values silently.
+  # A missing column makes the INSERT fail and the transaction roll back.
+  cols <- paste(
+    vapply(names(out), function(x) qi(con, x), character(1L)),
+    collapse = ", "
+  )
+
   DBI::dbBegin(con)
   ok <- tryCatch(
     {
-      if (table_exists(con, schema, table)) {
-        DBI::dbExecute(con, sprintf("DROP TABLE %s.%s", s, qi(con, table)))
-      }
-      DBI::dbExecute(
-        con,
-        sprintf(
-          "ALTER TABLE %s.%s RENAME TO %s",
-          s,
-          qi(con, staging_tbl),
-          qi(con, table)
+      if (replace_rows) {
+        DBI::dbExecute(con, sprintf("TRUNCATE TABLE %s.%s", s, t))
+        n_ins <- DBI::dbExecute(
+          con,
+          sprintf(
+            "INSERT INTO %s.%s (%s) SELECT %s FROM %s.%s",
+            s,
+            t,
+            cols,
+            cols,
+            s,
+            st
+          )
         )
-      )
-      # No rename to canonical names: see build_names(). The suffixed names
-      # stay, and the swap is now two statements that cannot collide with
-      # anything else in the schema.
+        if (n_ins != nrow(out)) {
+          stop(sprintf("inserted %d rows, expected %d", n_ins, nrow(out)))
+        }
+        DBI::dbExecute(con, sprintf("DROP TABLE %s.%s", s, st))
+      } else {
+        # No rename to canonical names: see build_names().
+        DBI::dbExecute(
+          con,
+          sprintf("ALTER TABLE %s.%s RENAME TO %s", s, st, t)
+        )
+      }
       DBI::dbCommit(con)
       TRUE
     },
     error = function(e) {
       DBI::dbRollback(con)
-      .err("swap failed, rolled back: ", conditionMessage(e))
+      .err("full write failed, rolled back: ", conditionMessage(e))
       FALSE
     }
   )
   if (!ok) {
     .die(1L, "full write aborted")
   }
-  .info("swapped ", schema, ".", staging_tbl, " into ", schema, ".", table)
+  if (replace_rows) {
+    .info(
+      "replaced the rows of ",
+      schema,
+      ".",
+      table,
+      " (",
+      nrow(out),
+      " rows);",
+      " dependent materialised views need REFRESH MATERIALIZED VIEW"
+    )
+  } else {
+    .info("renamed ", schema, ".", staging_tbl, " to ", schema, ".", table)
+  }
 }
 
 write_incremental <- function(con, out, schema, table, months) {
