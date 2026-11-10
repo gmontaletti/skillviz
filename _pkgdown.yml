@@ -130,6 +130,24 @@ reference:
       - select_share_model
       - forecast_share
 
+  - title: Share Intervals
+    desc: Design effects with sources as clusters, intervals for shares, empirical Bayes shares on code hierarchies, cluster bootstrap and hierarchical FDR.
+    contents:
+      - share_interval
+      - cluster_deff
+      - smooth_deff
+      - fit_betabinom
+      - eb_share_tree
+      - cluster_boot_share
+      - tree_fdr
+      - finest_reliable_level
+
+  - title: Source Composition
+    desc: Decomposition of share changes into within-source and composition components, fixed-weight share series.
+    contents:
+      - decompose_share_change
+      - fixed_weight_share
+
   - title: Skill Extraction
     desc: Extract profession-specific skills and build skill profiles.
     contents:

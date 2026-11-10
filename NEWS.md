@@ -1,3 +1,45 @@
+# skillviz 0.7.0
+
+## Intervalli delle quote
+
+* Nuove funzioni per l'intervallo della quota di un codice quando gli annunci
+  sono raggruppati per fonte e le fonti sono trattate come un campione di siti:
+  - `share_interval()` calcola gli intervalli di Wilson, Jeffreys e logit con
+    la numerosità efficace `n / deff` e il quantile t con i gradi di libertà
+    indicati;
+  - `cluster_deff()` stima la varianza linearizzata dello stimatore di
+    rapporto con le fonti come cluster, l'effetto di disegno, la correlazione
+    intra-fonte, il numero efficace di fonti e i gradi di libertà; con
+    `cluster_totals` entrano nella varianza anche le fonti in cui il codice
+    non compare;
+  - `smooth_deff()` stabilizza l'effetto di disegno dei codici piccoli con una
+    funzione di varianza per livello e con una contrazione di `log(deff)` verso
+    il nodo genitore;
+  - `fit_betabinom()` stima per massima verosimiglianza media e concentrazione
+    di una beta-binomiale;
+  - `eb_share_tree()` dà stime contratte (empirical Bayes) e intervalli
+    credibili delle quote su una gerarchia di codici: Dirichlet-multinomiale
+    per le partizioni (le quote dei figli sommano a quella del genitore),
+    beta-binomiale per i gruppi sovrapposti, con controllo di coerenza;
+  - `cluster_boot_share()` calcola intervalli percentili e errori standard con
+    il bootstrap delle fonti;
+  - `tree_fdr()` applica la procedura gerarchica di Yekutieli (2008):
+    Benjamini-Hochberg entro ogni famiglia di fratelli, discesa nei figli solo
+    dei nodi rigettati;
+  - `finest_reliable_level()` restituisce per ogni codice il nodo più fine,
+    fra il codice e i suoi antenati, con ampiezza relativa dell'intervallo
+    entro la soglia.
+
+## Composizione delle fonti
+
+* `decompose_share_change()` scompone la variazione di una quota fra due
+  periodi, o due finestre, nelle componenti entro fonte, fra fonti, ingressi e
+  uscite (Melitz e Polanec, 2015); le componenti sommano alla variazione
+  osservata.
+* `fixed_weight_share()` calcola la serie delle quote a pesi di fonte fissi,
+  rinormalizzati sulle fonti presenti in ogni periodo, accanto alla quota
+  osservata.
+
 # skillviz 0.6.1
 
 ## Pesi della pendenza delle quote
