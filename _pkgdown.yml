@@ -149,7 +149,7 @@ reference:
       - fixed_weight_share
 
   - title: Stock and Trend Indices
-    desc: Daily stock of open postings from dated events, duration survival, standardised-duration stock, weekly aggregation, trend extraction and index numbers aggregated over sources.
+    desc: Daily stock of open postings from dated events, duration survival, standardised-duration stock, weekly aggregation, trend extraction, Henderson and Whittaker smoothers and index numbers aggregated over sources.
     contents:
       - events_from_intervals
       - stock_from_events
@@ -164,6 +164,9 @@ reference:
       - compose_skill_index
       - index_jackknife
       - trend_concordance
+      - henderson_weights
+      - henderson_filter
+      - whittaker_smooth
 
   - title: Skill Extraction
     desc: Extract profession-specific skills and build skill profiles.
