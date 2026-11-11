@@ -52,8 +52,8 @@ A data.table with columns \code{key_cols}, \code{time_col} (IDate),
 (logical, \code{TRUE} where the input was missing) and \code{method}, ordered by
 key and time. Attribute \code{fits}: one row per key with \code{method}, \code{K},
 \code{aicc}, \code{var_level}, \code{var_slope}, \code{var_obs}, \code{convergence},
-\code{zero_variance}, \code{degenerate}, \code{interpolated}, \code{n_obs}, \code{n_na} and
-\code{error}. Attributes \code{transform}, \code{key_cols}, \code{time_col} and \code{period}
+\code{zero_variance}, \code{boundary}, \code{retried}, \code{start}, \code{degenerate},
+\code{interpolated}, \code{n_obs}, \code{n_na} and \code{error}. Attributes \code{transform}, \code{key_cols}, \code{time_col} and \code{period}
 record the call.
 }
 \description{
@@ -103,16 +103,34 @@ component (no Fourier terms, \code{K = NA}) and a 52-week period instead of
 52.18: a descriptive benchmark only.
 }
 
-\strong{Degenerate fits.} For \code{llt} a fit is flagged \code{degenerate} when a
-variance is estimated at zero (below \code{1e-8} times the variance of the
-first differences) or the optimiser did not converge (\code{convergence != 0});
-\code{zero_variance} lists the variances at zero. For \code{ets} the flag marks a
-smoothing parameter (\code{alpha}, \code{beta}) at its lower bound \code{1e-4}. A zero
+\strong{Boundary estimates and failed fits.} A variance estimated at zero is a
+legitimate boundary maximum-likelihood estimate, not a failure: a zero
 slope variance means a deterministic drift, a zero level variance an
-integrated random walk trend: both are valid models but worth reporting.
-No fallback method is used: when a fit fails (e.g. on a deterministic
-series), the key keeps \code{NA} components, the message is stored in
-\code{error} and a warning is raised.
+integrated random walk (smooth) trend, a zero observation variance a
+series without measurement noise (e.g. a moving sum). For \code{llt},
+\code{zero_variance} lists the variances at zero (below \code{1e-8} times the
+variance of the first differences) and \code{boundary} is \code{TRUE} when there is
+at least one; for \code{ets}, \code{zero_variance} lists the smoothing parameters
+(\code{alpha}, \code{beta}) at their lower bound \code{1e-4} and \code{boundary} flags them.
+The \code{llt} likelihood is maximised from two starts: the StructTS default
+and the series rescaled to unit standard deviation of its first
+differences, with initial variances (level 0.5, slope 0.01, observation
+0.5) on that scale and an optimiser \code{parscale} of 0.01 for the slope
+variance; the variances are back-transformed. The default start alone
+often stops at a spurious zero slope variance with a lower likelihood.
+Among the converged starts (\code{convergence == 0}, finite log-likelihood)
+the one with the highest log-likelihood is kept (\code{start}); \code{retried} is
+\code{TRUE} when the default start did not converge. When neither start
+converges and the best one has variances at zero, the model is refitted
+with those variances fixed at zero (\code{start = "boundary"}); the refit is
+kept when it converges without loss of likelihood, which confirms a
+boundary maximum. \code{degenerate} marks failed fits only: for \code{llt}, when
+no start converges (the best finite one is then returned). Leading missing weeks are excluded from the
+estimation (StructTS needs an observed first value) and filled by the
+Kalman smoother. For \code{ets}, \code{degenerate} marks a non-finite
+log-likelihood. No fallback method is used: when a fit errors (e.g. on a
+deterministic series), the key keeps \code{NA} components, \code{degenerate} is
+\code{TRUE}, the message is stored in \code{error} and a warning is raised.
 
 \strong{Uncertainty.} \code{trend_se} (and \code{trend_lo}, \code{trend_hi}) is the
 model-based standard error of the smoothed level, conditional on the
@@ -123,7 +141,8 @@ innovations are moving averages by construction and \code{trend_se}
 understates the uncertainty. Use it on inflow-type series only.
 
 \strong{Cost.} With \code{harmonics = NULL}, each key requires
-\code{(max_harmonics + 1) * (n_backfit + 1)} trend fits.
+\code{(max_harmonics + 1) * (n_backfit + 1)} trend fits (each with two
+optimiser starts for \code{llt}).
 }
 \examples{
 set.seed(1)

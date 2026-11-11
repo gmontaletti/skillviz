@@ -204,22 +204,132 @@
   x[(h + 1L):n] - x[seq_len(n - h)]
 }
 
+#' One StructTS local linear trend fit, errors returned as conditions
+#'
+#' `x` must not start with `NA`. `init` are initial variances on the scale
+#' of `x` (`NULL` = StructTS default). Optimiser warnings are muffled: the
+#' code is returned in `$code`.
+#' @keywords internal
+#' @noRd
+.ti_structts <- function(x, init = NULL, optim.control = NULL, fixed = NULL) {
+  tryCatch(
+    suppressWarnings(
+      stats::StructTS(
+        stats::ts(x),
+        type = "trend",
+        init = init,
+        fixed = fixed,
+        optim.control = optim.control
+      )
+    ),
+    error = function(e) e
+  )
+}
+
+#' Whether a StructTS fit is usable and converged
+#' @keywords internal
+#' @noRd
+.ti_llt_ok <- function(fit) {
+  !inherits(fit, "error") && is.finite(fit$loglik) && fit$code == 0L
+}
+
 #' Local linear trend by StructTS, smoothed by KalmanSmooth
+#'
+#' Two starts of the optimiser: the StructTS default, and the series
+#' rescaled to unit standard deviation of its first differences with initial
+#' variances (level 0.5, slope 0.01, observation 0.5) and an optimiser
+#' parameter scale 100 times smaller for the slope variance. The default
+#' start often stops at a spurious zero slope variance with a lower
+#' likelihood. Among the converged starts the one with the highest
+#' log-likelihood is kept; without a converged start, the best finite one
+#' is kept and `degenerate` is `TRUE`, unless refitting it with its zero
+#' variances fixed at zero converges without loss of likelihood (start
+#' "boundary"). `retried` is `TRUE` when the default start did not
+#' converge. Leading `NA` weeks are dropped for the
+#' estimation (StructTS requires a first observed value) and recovered by
+#' running the Kalman filter and smoother on the full series with the
+#' estimated model.
 #' @keywords internal
 #' @noRd
 .ti_trend_llt <- function(x) {
-  # optim convergence warnings (localised messages) are muffled: the code
-  # is reported in `convergence` and in the `degenerate` flag
-  fit <- suppressWarnings(stats::StructTS(stats::ts(x), type = "trend"))
-  sm <- stats::KalmanSmooth(fit$data, fit$model0, nit = -1L)
-  coef <- fit$coef
+  n <- length(x)
+  first <- which(!is.na(x))[1L]
+  xf <- x[first:n]
+  n_f <- sum(!is.na(xf))
+  sc <- sqrt(.ti_var(diff(xf)))
+  if (!is.finite(sc) || sc <= 0) {
+    sc <- 1
+  }
+  starts <- list(
+    default = list(fit = .ti_structts(xf), sc = 1),
+    rescaled = list(
+      fit = .ti_structts(
+        (xf - xf[1L]) / sc,
+        init = c(level = 0.5, slope = 0.01, epsilon = 0.5),
+        optim.control = list(parscale = c(1, 0.01, 1))
+      ),
+      sc = sc
+    )
+  )
+  ll <- vapply(
+    starts,
+    function(s) {
+      if (inherits(s$fit, "error")) NA_real_ else s$fit$loglik - n_f * log(s$sc)
+    },
+    numeric(1)
+  )
+  ok <- vapply(starts, function(s) .ti_llt_ok(s$fit), logical(1))
+  cand <- if (any(ok)) which(ok) else which(is.finite(ll))
+  if (length(cand) == 0L) {
+    err <- Filter(function(s) inherits(s$fit, "error"), starts)
+    stop(
+      if (length(err)) conditionMessage(err[[1L]]$fit) else
+        "non-finite log-likelihood",
+      call. = FALSE
+    )
+  }
+  pick <- cand[which.max(ll[cand])]
   tol <- 1e-8 * max(.ti_var(diff(x)), .Machine$double.eps, na.rm = TRUE)
+  if (!any(ok)) {
+    # no converged start: if the best one has variances at zero, refit
+    # with them fixed at zero (boundary profile); accepted when it
+    # converges without losing likelihood
+    b <- starts[[pick]]
+    zb <- b$fit$coef * b$sc^2 <= tol
+    if (any(zb) && !all(zb)) {
+      xs <- if (b$sc == 1) xf else (xf - xf[1L]) / b$sc
+      fx <- ifelse(zb, 0, NA_real_)
+      f3 <- .ti_structts(xs, init = pmax(b$fit$coef, 1e-12), fixed = fx)
+      ll3 <- if (inherits(f3, "error")) NA_real_ else
+        f3$loglik - n_f * log(b$sc)
+      if (.ti_llt_ok(f3) && ll3 >= ll[pick] - 1e-8 * abs(ll[pick])) {
+        starts$boundary <- list(fit = f3, sc = b$sc)
+        ll <- c(ll, boundary = ll3)
+        ok <- c(ok, boundary = TRUE)
+        pick <- length(starts)
+      }
+    }
+  }
+  fit <- starts[[pick]]$fit
+  s2 <- starts[[pick]]$sc^2
+  coef <- fit$coef * s2
+  # model on the original scale with the StructTS initial state, run on
+  # the full series (leading NA too)
+  mod <- fit$model0
+  mod$a <- c(xf[1L], 0)
+  mod$P[] <- 1e6 * stats::var(xf, na.rm = TRUE) / 100
+  mod$Pn[] <- 0
+  mod$V <- diag(unname(coef[1:2]))
+  mod$h <- unname(coef[3L])
+  sm <- stats::KalmanSmooth(x, mod, nit = -1L)
+  fl <- stats::KalmanRun(x, mod, nit = -1L)
+  loglik <- unname(ll[pick])
   zero <- c("level", "slope", "obs")[c(coef[1:3] <= tol)]
   list(
     trend = as.numeric(sm$smooth[, 1L]),
     trend_se = sqrt(pmax(as.numeric(sm$var[, 1L, 1L]), 0)),
-    trend_filtered = as.numeric(fit$fitted[, "level"]),
-    loglik = fit$loglik,
+    trend_filtered = as.numeric(fl$states[, 1L]),
+    loglik = loglik,
     n_par = 3L,
     n_lik = sum(!is.na(x)),
     var_level = unname(coef[1L]),
@@ -227,7 +337,10 @@
     var_obs = unname(coef[3L]),
     convergence = as.integer(fit$code),
     zero_variance = if (length(zero)) paste(zero, collapse = ",") else "",
-    degenerate = length(zero) > 0L || fit$code != 0L
+    boundary = length(zero) > 0L,
+    retried = !ok[["default"]],
+    start = names(starts)[pick],
+    degenerate = !ok[[pick]]
   )
 }
 
@@ -269,7 +382,10 @@
     } else {
       ""
     },
-    degenerate = length(at_bound) > 0L
+    boundary = length(at_bound) > 0L,
+    retried = FALSE,
+    start = NA_character_,
+    degenerate = !is.finite(gl$log_lik)
   )
 }
 
@@ -343,6 +459,9 @@
       var_obs = NA_real_,
       convergence = NA_integer_,
       zero_variance = "",
+      boundary = FALSE,
+      retried = FALSE,
+      start = NA_character_,
       degenerate = FALSE
     ))
   }
@@ -369,6 +488,9 @@
     var_obs = f$var_obs,
     convergence = f$convergence,
     zero_variance = f$zero_variance,
+    boundary = f$boundary,
+    retried = f$retried,
+    start = f$start,
     degenerate = f$degenerate
   )
 }
@@ -600,16 +722,34 @@
 #'   component (no Fourier terms, `K = NA`) and a 52-week period instead of
 #'   52.18: a descriptive benchmark only.
 #'
-#' **Degenerate fits.** For `llt` a fit is flagged `degenerate` when a
-#' variance is estimated at zero (below `1e-8` times the variance of the
-#' first differences) or the optimiser did not converge (`convergence != 0`);
-#' `zero_variance` lists the variances at zero. For `ets` the flag marks a
-#' smoothing parameter (`alpha`, `beta`) at its lower bound `1e-4`. A zero
+#' **Boundary estimates and failed fits.** A variance estimated at zero is a
+#' legitimate boundary maximum-likelihood estimate, not a failure: a zero
 #' slope variance means a deterministic drift, a zero level variance an
-#' integrated random walk trend: both are valid models but worth reporting.
-#' No fallback method is used: when a fit fails (e.g. on a deterministic
-#' series), the key keeps `NA` components, the message is stored in
-#' `error` and a warning is raised.
+#' integrated random walk (smooth) trend, a zero observation variance a
+#' series without measurement noise (e.g. a moving sum). For `llt`,
+#' `zero_variance` lists the variances at zero (below `1e-8` times the
+#' variance of the first differences) and `boundary` is `TRUE` when there is
+#' at least one; for `ets`, `zero_variance` lists the smoothing parameters
+#' (`alpha`, `beta`) at their lower bound `1e-4` and `boundary` flags them.
+#' The `llt` likelihood is maximised from two starts: the StructTS default
+#' and the series rescaled to unit standard deviation of its first
+#' differences, with initial variances (level 0.5, slope 0.01, observation
+#' 0.5) on that scale and an optimiser `parscale` of 0.01 for the slope
+#' variance; the variances are back-transformed. The default start alone
+#' often stops at a spurious zero slope variance with a lower likelihood.
+#' Among the converged starts (`convergence == 0`, finite log-likelihood)
+#' the one with the highest log-likelihood is kept (`start`); `retried` is
+#' `TRUE` when the default start did not converge. When neither start
+#' converges and the best one has variances at zero, the model is refitted
+#' with those variances fixed at zero (`start = "boundary"`); the refit is
+#' kept when it converges without loss of likelihood, which confirms a
+#' boundary maximum. `degenerate` marks failed fits only: for `llt`, when
+#' no start converges (the best finite one is then returned). Leading missing weeks are excluded from the
+#' estimation (StructTS needs an observed first value) and filled by the
+#' Kalman smoother. For `ets`, `degenerate` marks a non-finite
+#' log-likelihood. No fallback method is used: when a fit errors (e.g. on a
+#' deterministic series), the key keeps `NA` components, `degenerate` is
+#' `TRUE`, the message is stored in `error` and a warning is raised.
 #'
 #' **Uncertainty.** `trend_se` (and `trend_lo`, `trend_hi`) is the
 #' model-based standard error of the smoothed level, conditional on the
@@ -620,7 +760,8 @@
 #' understates the uncertainty. Use it on inflow-type series only.
 #'
 #' **Cost.** With `harmonics = NULL`, each key requires
-#' `(max_harmonics + 1) * (n_backfit + 1)` trend fits.
+#' `(max_harmonics + 1) * (n_backfit + 1)` trend fits (each with two
+#' optimiser starts for `llt`).
 #'
 #' @param dt A data.frame or data.table with one row per key x week.
 #' @param key_cols Character vector of key columns identifying each series.
@@ -644,8 +785,8 @@
 #'   (logical, `TRUE` where the input was missing) and `method`, ordered by
 #'   key and time. Attribute `fits`: one row per key with `method`, `K`,
 #'   `aicc`, `var_level`, `var_slope`, `var_obs`, `convergence`,
-#'   `zero_variance`, `degenerate`, `interpolated`, `n_obs`, `n_na` and
-#'   `error`. Attributes `transform`, `key_cols`, `time_col` and `period`
+#'   `zero_variance`, `boundary`, `retried`, `start`, `degenerate`,
+#'   `interpolated`, `n_obs`, `n_na` and `error`. Attributes `transform`, `key_cols`, `time_col` and `period`
 #'   record the call.
 #'
 #' @examples
@@ -761,6 +902,9 @@ extract_trend <- function(
     var_obs = NA_real_,
     convergence = NA_integer_,
     zero_variance = NA_character_,
+    boundary = NA,
+    retried = NA,
+    start = NA_character_,
     degenerate = NA,
     interpolated = FALSE,
     n_obs = 0L,
@@ -804,6 +948,9 @@ extract_trend <- function(
       "var_obs",
       "convergence",
       "zero_variance",
+      "boundary",
+      "retried",
+      "start",
       "degenerate"
     )) {
       data.table::set(fits, g, cc, out[[cc]])

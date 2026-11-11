@@ -120,28 +120,131 @@ test_that("missing weeks are completed, smoothed and flagged", {
   expect_false(attr(tr, "fits")$interpolated)
 })
 
-test_that("degenerate fits are flagged, failures are reported", {
+test_that("failed fits are degenerate, boundary variances are not", {
   weeks <- data.table::as.IDate("2023-05-01") + 7L * (0:119)
-  line <- data.table::data.table(
-    source = "a",
-    week = weeks,
-    n = exp(1 + 0.01 * seq_along(weeks))
-  )
+  # a constant series: the likelihood is not computable, the fit errors
+  cst <- data.table::data.table(source = "a", week = weeks, n = 5)
   expect_warning(
-    tr <- extract_trend(line, "source", "week", "n", harmonics = 0L),
+    tr <- extract_trend(cst, "source", "week", "n", harmonics = 0L),
     "fit failed"
   )
   fits <- attr(tr, "fits")
   expect_true(fits$degenerate)
   expect_false(is.na(fits$error))
   expect_true(all(is.na(tr$trend)))
+  # an exact line: the optimiser does not converge even after the retry
+  line <- data.table::data.table(
+    source = "a",
+    week = weeks,
+    n = exp(1 + 0.01 * seq_along(weeks))
+  )
+  fits <- attr(
+    extract_trend(line, "source", "week", "n", harmonics = 0L),
+    "fits"
+  )
+  expect_true(fits$retried)
+  expect_identical(fits$degenerate, fits$convergence != 0L)
+  # a near-deterministic line: a zero variance is a boundary estimate
   set.seed(1)
   line[, n := n * exp(stats::rnorm(.N, 0, 1e-3))]
   tr <- extract_trend(line, "source", "week", "n", harmonics = 0L)
   fits <- attr(tr, "fits")
-  expect_true(fits$degenerate)
+  expect_false(fits$degenerate)
+  expect_true(fits$boundary)
   expect_true(nzchar(fits$zero_variance))
+  expect_identical(fits$convergence, 0L)
   expect_false(anyNA(tr$trend))
+})
+
+test_that("a moving sum gets a zero observation variance, not a failure", {
+  set.seed(4)
+  n_w <- 160L
+  weeks <- data.table::as.IDate("2023-05-01") + 7L * (0:(n_w - 1L))
+  inflow <- exp(5 + cumsum(stats::rnorm(n_w + 16L, 0, 0.05)))
+  stock <- as.numeric(stats::filter(inflow, rep(1, 17L), sides = 1L))
+  d <- data.table::data.table(
+    source = "a",
+    week = weeks,
+    s = stock[17L:(n_w + 16L)]
+  )
+  fits <- attr(extract_trend(d, "source", "week", "s", harmonics = 0L), "fits")
+  expect_false(fits$degenerate)
+  expect_true(is.na(fits$error))
+  expect_identical(fits$boundary, grepl("obs", fits$zero_variance))
+})
+
+test_that("leading missing weeks are smoothed, not a failure", {
+  d <- sim_weekly(n = 140L)
+  d[1:3, n := NA]
+  tr <- extract_trend(d, "source", "week", "n")
+  fits <- attr(tr, "fits")
+  expect_true(is.na(fits$error))
+  expect_false(fits$degenerate)
+  expect_identical(fits$n_na, 3L)
+  expect_false(anyNA(tr$trend))
+  tr[d, true := i.true, on = c("source", "week")]
+  expect_lt(mean(abs(tr$trend - tr$true)), 0.02)
+  expect_lt(max(abs(tr$trend[1:3] - tr$true[1:3])), 0.1)
+})
+
+test_that("the second start never lowers the likelihood of the default", {
+  real <- .ti_structts
+  d <- sim_weekly()
+  two <- attr(extract_trend(d, "source", "week", "n", harmonics = 2L), "fits")
+  testthat::local_mocked_bindings(.ti_structts = function(x, init = NULL, ...) {
+    if (is.null(init)) real(x) else simpleError("off")
+  })
+  one <- attr(extract_trend(d, "source", "week", "n", harmonics = 2L), "fits")
+  expect_lte(two$aicc, one$aicc + 1e-8)
+  expect_identical(one$start, "default")
+})
+
+test_that("non-convergence triggers one retry; persistent failure is degenerate", {
+  real <- .ti_structts
+  d <- sim_weekly(n = 120L)
+  # first call fails to converge, the retry is the real fit
+  calls <- 0L
+  testthat::local_mocked_bindings(.ti_structts = function(x, init = NULL, ...) {
+    calls <<- calls + 1L
+    f <- real(x, init, ...)
+    if (is.null(init)) {
+      f$code <- 52L
+    }
+    f
+  })
+  tr <- extract_trend(d, "source", "week", "n", harmonics = 1L)
+  fits <- attr(tr, "fits")
+  expect_true(fits$retried)
+  expect_identical(fits$start, "rescaled")
+  expect_false(fits$degenerate)
+  expect_identical(fits$convergence, 0L)
+  expect_false(anyNA(tr$trend))
+  # the retry on the rescaled series gives the same trend as the direct fit
+  testthat::local_mocked_bindings(.ti_structts = real)
+  tr0 <- extract_trend(d, "source", "week", "n", harmonics = 1L)
+  expect_false(attr(tr0, "fits")$retried)
+  expect_equal(tr$trend, tr0$trend, tolerance = 1e-3)
+  # both attempts fail to converge: degenerate, components still returned
+  testthat::local_mocked_bindings(.ti_structts = function(x, init = NULL, ...) {
+    f <- real(x, init, ...)
+    f$code <- 52L
+    f
+  })
+  tr <- extract_trend(d, "source", "week", "n", harmonics = 1L)
+  fits <- attr(tr, "fits")
+  expect_true(fits$retried)
+  expect_true(fits$degenerate)
+  expect_identical(fits$convergence, 52L)
+  expect_true(is.na(fits$error))
+  # both attempts error: the key fails
+  testthat::local_mocked_bindings(.ti_structts = function(x, init = NULL, ...) {
+    simpleError("boom")
+  })
+  expect_warning(
+    tr <- extract_trend(d, "source", "week", "n", harmonics = 1L),
+    "fit failed"
+  )
+  expect_true(attr(tr, "fits")$degenerate)
 })
 
 test_that("several keys and logit transform", {
@@ -182,6 +285,10 @@ test_that("ets and stl run", {
   expect_true(all(is.na(te$trend_se)))
   expect_identical(te$trend, te$trend_filtered)
   expect_true(attr(te, "fits")$interpolated)
+  fe <- attr(te, "fits")
+  expect_false(fe$degenerate)
+  expect_false(fe$retried)
+  expect_identical(fe$boundary, nzchar(fe$zero_variance))
   tr <- data.table::copy(te)
   tr[d, true := i.true, on = c("source", "week")]
   expect_lt(mean(abs(tr$trend - tr$true)), 0.05)
