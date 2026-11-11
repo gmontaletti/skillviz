@@ -149,13 +149,21 @@ reference:
       - fixed_weight_share
 
   - title: Stock and Trend Indices
-    desc: Daily stock of open postings from dated events, duration survival, standardised-duration stock and weekly aggregation.
+    desc: Daily stock of open postings from dated events, duration survival, standardised-duration stock, weekly aggregation, trend extraction and index numbers aggregated over sources.
     contents:
       - events_from_intervals
       - stock_from_events
       - duration_survival
       - standardized_stock
       - to_weekly
+      - extract_trend
+      - trend_diagnostics
+      - trend_revisions
+      - trend_index
+      - aggregate_index
+      - compose_skill_index
+      - index_jackknife
+      - trend_concordance
 
   - title: Skill Extraction
     desc: Extract profession-specific skills and build skill profiles.
