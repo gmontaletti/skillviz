@@ -343,7 +343,29 @@ utils::globalVariables(c(
   "v_cluster",
   "vincoli_ok",
   "x0",
-  "x1"
+  "x1",
+  # stock.R internals
+  ".d",
+  ".dur",
+  ".end",
+  ".f",
+  ".fin",
+  ".fout",
+  ".gid",
+  ".ok",
+  ".p",
+  ".start",
+  ".tot",
+  "complete",
+  "date",
+  "i..gid",
+  "inflow",
+  "n_days",
+  "outflow",
+  "stock",
+  "stock_std",
+  "surv",
+  "week"
 ))
 
 .onLoad <- function(libname, pkgname) {
