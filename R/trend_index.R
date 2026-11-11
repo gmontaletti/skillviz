@@ -249,9 +249,16 @@
 #' estimation (StructTS requires a first observed value) and recovered by
 #' running the Kalman filter and smoother on the full series with the
 #' estimated model.
+#'
+#' With `smooth = TRUE` the level variance is fixed at zero in every start
+#' (`fixed = c(0, NA, NA)`, StructTS order level, slope, epsilon): the trend
+#' is an integrated random walk and only the slope and observation
+#' variances are estimated. The fixed level variance is reported in
+#' `fixed_variance`, not in `zero_variance`, and does not make the fit a
+#' boundary estimate.
 #' @keywords internal
 #' @noRd
-.ti_trend_llt <- function(x) {
+.ti_trend_llt <- function(x, smooth = FALSE) {
   n <- length(x)
   first <- which(!is.na(x))[1L]
   xf <- x[first:n]
@@ -260,13 +267,17 @@
   if (!is.finite(sc) || sc <= 0) {
     sc <- 1
   }
+  # free variances (StructTS order: level, slope, epsilon)
+  free <- if (smooth) c(FALSE, TRUE, TRUE) else c(TRUE, TRUE, TRUE)
+  fx0 <- if (smooth) c(0, NA_real_, NA_real_) else NULL
   starts <- list(
-    default = list(fit = .ti_structts(xf), sc = 1),
+    default = list(fit = .ti_structts(xf, fixed = fx0), sc = 1),
     rescaled = list(
       fit = .ti_structts(
         (xf - xf[1L]) / sc,
-        init = c(level = 0.5, slope = 0.01, epsilon = 0.5),
-        optim.control = list(parscale = c(1, 0.01, 1))
+        init = c(level = if (smooth) 0 else 0.5, slope = 0.01, epsilon = 0.5),
+        optim.control = list(parscale = c(1, 0.01, 1)[free]),
+        fixed = fx0
       ),
       sc = sc
     )
@@ -295,8 +306,8 @@
     # with them fixed at zero (boundary profile); accepted when it
     # converges without losing likelihood
     b <- starts[[pick]]
-    zb <- b$fit$coef * b$sc^2 <= tol
-    if (any(zb) && !all(zb)) {
+    zb <- b$fit$coef * b$sc^2 <= tol | !free
+    if (any(zb & free) && !all(zb)) {
       xs <- if (b$sc == 1) xf else (xf - xf[1L]) / b$sc
       fx <- ifelse(zb, 0, NA_real_)
       f3 <- .ti_structts(xs, init = pmax(b$fit$coef, 1e-12), fixed = fx)
@@ -324,19 +335,20 @@
   sm <- stats::KalmanSmooth(x, mod, nit = -1L)
   fl <- stats::KalmanRun(x, mod, nit = -1L)
   loglik <- unname(ll[pick])
-  zero <- c("level", "slope", "obs")[c(coef[1:3] <= tol)]
+  zero <- c("level", "slope", "obs")[c(coef[1:3] <= tol) & free]
   list(
     trend = as.numeric(sm$smooth[, 1L]),
     trend_se = sqrt(pmax(as.numeric(sm$var[, 1L, 1L]), 0)),
     trend_filtered = as.numeric(fl$states[, 1L]),
     loglik = loglik,
-    n_par = 3L,
+    n_par = sum(free),
     n_lik = sum(!is.na(x)),
     var_level = unname(coef[1L]),
     var_slope = unname(coef[2L]),
     var_obs = unname(coef[3L]),
     convergence = as.integer(fit$code),
     zero_variance = if (length(zero)) paste(zero, collapse = ",") else "",
+    fixed_variance = if (smooth) "level" else "",
     boundary = length(zero) > 0L,
     retried = !ok[["default"]],
     start = names(starts)[pick],
@@ -382,6 +394,7 @@
     } else {
       ""
     },
+    fixed_variance = "",
     boundary = length(at_bound) > 0L,
     retried = FALSE,
     start = NA_character_,
@@ -393,7 +406,12 @@
 #' @keywords internal
 #' @noRd
 .ti_fit_trend <- function(x, method) {
-  switch(method, llt = .ti_trend_llt(x), ets = .ti_trend_ets(x))
+  switch(
+    method,
+    llt = .ti_trend_llt(x),
+    smooth = .ti_trend_llt(x, smooth = TRUE),
+    ets = .ti_trend_ets(x)
+  )
 }
 
 #' Joint trend + Fourier seasonal fit by backfitting
@@ -459,6 +477,7 @@
       var_obs = NA_real_,
       convergence = NA_integer_,
       zero_variance = "",
+      fixed_variance = "",
       boundary = FALSE,
       retried = FALSE,
       start = NA_character_,
@@ -488,6 +507,7 @@
     var_obs = f$var_obs,
     convergence = f$convergence,
     zero_variance = f$zero_variance,
+    fixed_variance = f$fixed_variance,
     boundary = f$boundary,
     retried = f$retried,
     start = f$start,
@@ -688,12 +708,13 @@
 #' **Grid and missing weeks.** Within each key, times must be on a weekly
 #' grid; missing weeks (absent rows or `NA` values, e.g. outlier weeks set
 #' to `NA` upstream) are kept as `NA` in `observed` and flagged in
-#' `imputed`. The trend at those weeks is the model prediction (`llt`) or
+#' `imputed`. The trend at those weeks is the model prediction (`llt`,
+#' `smooth`) or
 #' comes from a linear interpolation of the input used for fitting (`ets`,
 #' `stl`); the per-key flag `interpolated` in the `fits` attribute marks the
 #' latter.
 #'
-#' **Seasonality.** For `llt` and `ets`, the seasonal component is
+#' **Seasonality.** For `llt`, `smooth` and `ets`, the seasonal component is
 #' \eqn{s_t = \sum_{k=1}^K a_k \sin(2\pi k t/P) + b_k \cos(2\pi k t/P)}, with
 #' `t` the number of weeks since 1970-01-01 (so the phase is common to all
 #' keys) and `P = period`. When `harmonics = NULL`, `K` ranges over
@@ -712,6 +733,17 @@
 #'   `stats::KalmanSmooth()`, `trend_se` its smoothed standard deviation,
 #'   `trend_filtered` the filtered (one-sided) level. `NA` weeks are handled
 #'   by the Kalman filter.
+#' * `smooth`: smooth trend model, the local linear trend of `llt` with the
+#'   level disturbance variance fixed at zero
+#'   (`stats::StructTS(type = "trend", fixed = c(0, NA, NA))`, parameters in
+#'   the order level, slope, epsilon). The level then has no shocks of its
+#'   own and the trend is an integrated random walk: only the slope changes
+#'   from week to week. Its smoothed level is a cubic-spline-type smoother
+#'   whose smoothness is set by the signal-to-noise ratio
+#'   `q = var_slope / var_obs`, estimated by maximum likelihood (no
+#'   smoothing parameter is chosen by hand). Smoothing, `trend_se`,
+#'   optimiser starts and treatment of `NA` weeks are those of `llt`;
+#'   `var_level` is reported as `0` and `fixed_variance` as `"level"`.
 #' * `ets`: `fable::ETS(error("A") + trend(c("A", "Ad")) + season("N"))` on
 #'   the adjusted series, with `NA` weeks linearly interpolated (ETS does not
 #'   accept missing values). `trend` and `trend_filtered` are both the
@@ -726,12 +758,14 @@
 #' legitimate boundary maximum-likelihood estimate, not a failure: a zero
 #' slope variance means a deterministic drift, a zero level variance an
 #' integrated random walk (smooth) trend, a zero observation variance a
-#' series without measurement noise (e.g. a moving sum). For `llt`,
-#' `zero_variance` lists the variances at zero (below `1e-8` times the
-#' variance of the first differences) and `boundary` is `TRUE` when there is
-#' at least one; for `ets`, `zero_variance` lists the smoothing parameters
+#' series without measurement noise (e.g. a moving sum). For `llt` and
+#' `smooth`, `zero_variance` lists the estimated variances at zero (below
+#' `1e-8` times the variance of the first differences) and `boundary` is
+#' `TRUE` when there is at least one; the level variance of `smooth` is
+#' fixed by the model, not estimated, so it is listed in `fixed_variance`
+#' and never in `zero_variance` or `boundary`; for `ets`, `zero_variance` lists the smoothing parameters
 #' (`alpha`, `beta`) at their lower bound `1e-4` and `boundary` flags them.
-#' The `llt` likelihood is maximised from two starts: the StructTS default
+#' The `llt` (and `smooth`) likelihood is maximised from two starts: the StructTS default
 #' and the series rescaled to unit standard deviation of its first
 #' differences, with initial variances (level 0.5, slope 0.01, observation
 #' 0.5) on that scale and an optimiser `parscale` of 0.01 for the slope
@@ -761,7 +795,8 @@
 #'
 #' **Cost.** With `harmonics = NULL`, each key requires
 #' `(max_harmonics + 1) * (n_backfit + 1)` trend fits (each with two
-#' optimiser starts for `llt`).
+#' optimiser starts for `llt` and `smooth`). The AICc counts 3 trend
+#' parameters for `llt` and 2 for `smooth`.
 #'
 #' @param dt A data.frame or data.table with one row per key x week.
 #' @param key_cols Character vector of key columns identifying each series.
@@ -769,14 +804,16 @@
 #' @param value_col Name of the value column (positive for `log`, in (0, 1)
 #'   for `logit`); `NA` allowed.
 #' @param transform Scale of the model: `"log"`, `"logit"` or `"none"`.
-#' @param method Trend method: `"llt"` (reference), `"ets"` or `"stl"`.
+#' @param method Trend method: `"llt"` (default), `"smooth"` (local linear
+#'   trend with level variance fixed at zero), `"ets"` or `"stl"`.
 #' @param period Seasonal period in weeks (default 365.25 / 7).
 #' @param harmonics Fixed number of Fourier harmonics, or `NULL` to choose
 #'   it by AICc. Ignored by `stl`.
 #' @param max_harmonics Largest number of harmonics considered when
 #'   `harmonics = NULL`.
 #' @param n_backfit Number of backfitting iterations (non-negative integer).
-#' @param level Confidence level of `trend_lo` and `trend_hi` (`llt` only).
+#' @param level Confidence level of `trend_lo` and `trend_hi` (`llt` and
+#'   `smooth` only).
 #'
 #' @return A data.table with columns `key_cols`, `time_col` (IDate),
 #'   `observed` (transformed scale, `NA` for missing weeks), `seasonal`,
@@ -785,7 +822,8 @@
 #'   (logical, `TRUE` where the input was missing) and `method`, ordered by
 #'   key and time. Attribute `fits`: one row per key with `method`, `K`,
 #'   `aicc`, `var_level`, `var_slope`, `var_obs`, `convergence`,
-#'   `zero_variance`, `boundary`, `retried`, `start`, `degenerate`,
+#'   `zero_variance`, `fixed_variance`, `boundary`, `retried`, `start`,
+#'   `degenerate`,
 #'   `interpolated`, `n_obs`, `n_na` and `error`. Attributes `transform`, `key_cols`, `time_col` and `period`
 #'   record the call.
 #'
@@ -802,6 +840,10 @@
 #' tr <- extract_trend(d, "source", "week", "n", max_harmonics = 2L)
 #' head(tr)
 #' attr(tr, "fits")
+#' # smooth trend model: level variance fixed at 0
+#' ts_ <- extract_trend(d, "source", "week", "n", method = "smooth",
+#'   harmonics = 1L)
+#' attr(ts_, "fits")[, c("var_level", "var_slope", "var_obs", "fixed_variance")]
 #'
 #' @export
 extract_trend <- function(
@@ -810,7 +852,7 @@ extract_trend <- function(
   time_col,
   value_col,
   transform = c("log", "logit", "none"),
-  method = c("llt", "ets", "stl"),
+  method = c("llt", "smooth", "ets", "stl"),
   period = 365.25 / 7,
   harmonics = NULL,
   max_harmonics = 6L,
@@ -902,6 +944,7 @@ extract_trend <- function(
     var_obs = NA_real_,
     convergence = NA_integer_,
     zero_variance = NA_character_,
+    fixed_variance = NA_character_,
     boundary = NA,
     retried = NA,
     start = NA_character_,
@@ -919,7 +962,12 @@ extract_trend <- function(
     n_na <- sum(is.na(y))
     data.table::set(fits, g, "n_obs", length(y) - n_na)
     data.table::set(fits, g, "n_na", n_na)
-    data.table::set(fits, g, "interpolated", n_na > 0L && method != "llt")
+    data.table::set(
+      fits,
+      g,
+      "interpolated",
+      n_na > 0L && !method %in% c("llt", "smooth")
+    )
     out <- tryCatch(
       .ti_extract_one(
         y,
@@ -948,6 +996,7 @@ extract_trend <- function(
       "var_obs",
       "convergence",
       "zero_variance",
+      "fixed_variance",
       "boundary",
       "retried",
       "start",
@@ -1563,8 +1612,16 @@ aggregate_index <- function(
 #' coverage of a skill is the share of the total weight held by its
 #' modelled sources; skills with coverage below `min_covered` are dropped
 #' and listed in the attribute `dropped`. The remaining skills are
-#' aggregated geometrically with [aggregate_index()] rules: weights
+#' aggregated over sources with [aggregate_index()] rules: weights
 #' renormalised over the modelled sources in each week, optional cap.
+#' With `type = "geometric"` (default) the skill index is
+#' \eqn{\exp(\sum_s \tilde w_s \log I_{s,k,t})}; with
+#' `type = "arithmetic"` it is \eqn{\sum_s \tilde w_s I_{s,k,t}}, with
+#' \eqn{\tilde w_s} the weights renormalised over the sources whose cell
+#' (source, skill) is modelled in week `t`. The per-source indices
+#' (attribute `by_source`) do not depend on `type`. The exact factorisation
+#' total x share holds source by source; after aggregation it holds only
+#' for the geometric mean.
 #'
 #' @param total_tr Trends of the total by source: columns `source_col`,
 #'   `time_col` and `value_col` (log scale), e.g. from [extract_trend()]
@@ -1585,6 +1642,8 @@ aggregate_index <- function(
 #'   `"trend"`).
 #' @param cap `NULL` or the maximum weight of a source (see
 #'   [aggregate_index()]).
+#' @param type Aggregation across sources: `"geometric"` (default) or
+#'   `"arithmetic"` (see [aggregate_index()]).
 #'
 #' @return A data.table with columns `skill_col`, `time_col`, `indice`,
 #'   `n_sources`, `covered_weight` and `n_eff`. Attributes: `by_source`
@@ -1606,6 +1665,9 @@ aggregate_index <- function(
 #' compose_skill_index(tot, sh, "source", "skill", "week", w,
 #'   base_period = c("2024-01-01", "2024-12-31")
 #' )
+#' compose_skill_index(tot, sh, "source", "skill", "week", w,
+#'   base_period = c("2024-01-01", "2024-12-31"), type = "arithmetic"
+#' )
 #'
 #' @export
 compose_skill_index <- function(
@@ -1619,11 +1681,13 @@ compose_skill_index <- function(
   min_covered = 0.5,
   scale = 100,
   value_col = "trend",
-  cap = NULL
+  cap = NULL,
+  type = c("geometric", "arithmetic")
 ) {
   caller <- "compose_skill_index"
 
   # 7.1 validation -----
+  type <- match.arg(type)
   .si_check_df(total_tr, "total_tr", caller)
   .si_check_df(share_tr, "share_tr", caller)
   for (a in c("source_col", "skill_col", "time_col", "value_col")) {
@@ -1707,7 +1771,7 @@ compose_skill_index <- function(
       n_eff = numeric(0)
     )
   } else {
-    out <- .ti_aggregate(d, ".sk", wt, "geometric", cap, caller)
+    out <- .ti_aggregate(d, ".sk", wt, type, cap, caller)
   }
   data.table::setnames(
     out,
@@ -1736,14 +1800,17 @@ compose_skill_index <- function(
 #' whose removal moves the index most.
 #'
 #' @details
-#' Without cap, the full weighted (log-)mean is a convex combination of the
+#' Without cap, the full weighted mean (of logs for `type = "geometric"`,
+#' of indices for `"arithmetic"`) is a convex combination of the
 #' leave-one-out means, so the full index always lies in
 #' `[jk_min, jk_max]`. In cells where a single source is present, removing
 #' it leaves no index; such leave-one-out values are ignored.
 #'
 #' @param idx,source_col,key_cols,time_col,weights As in [aggregate_index()].
 #' @param ... Further arguments passed to [aggregate_index()] (`index_col`,
-#'   `type`, `cap`).
+#'   `type`, `cap`), used both for the full index and for every
+#'   leave-one-out index: with `type = "arithmetic"` the range refers to
+#'   arithmetic aggregates.
 #'
 #' @return A data.table with columns `key_cols`, `time_col`, the full index
 #'   (`index_col`), `n_sources`, `jk_min`, `jk_max` (range of the

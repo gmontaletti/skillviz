@@ -15,7 +15,8 @@ compose_skill_index(
   min_covered = 0.5,
   scale = 100,
   value_col = "trend",
-  cap = NULL
+  cap = NULL,
+  type = c("geometric", "arithmetic")
 )
 }
 \arguments{
@@ -48,6 +49,9 @@ logical column of \code{share_tr}.}
 
 \item{cap}{\code{NULL} or the maximum weight of a source (see
 \code{\link[=aggregate_index]{aggregate_index()}}).}
+
+\item{type}{Aggregation across sources: \code{"geometric"} (default) or
+\code{"arithmetic"} (see \code{\link[=aggregate_index]{aggregate_index()}}).}
 }
 \value{
 A data.table with columns \code{skill_col}, \code{time_col}, \code{indice},
@@ -78,8 +82,16 @@ A cell (source, skill) is modelled when it has a non-missing index. The
 coverage of a skill is the share of the total weight held by its
 modelled sources; skills with coverage below \code{min_covered} are dropped
 and listed in the attribute \code{dropped}. The remaining skills are
-aggregated geometrically with \code{\link[=aggregate_index]{aggregate_index()}} rules: weights
+aggregated over sources with \code{\link[=aggregate_index]{aggregate_index()}} rules: weights
 renormalised over the modelled sources in each week, optional cap.
+With \code{type = "geometric"} (default) the skill index is
+\eqn{\exp(\sum_s \tilde w_s \log I_{s,k,t})}; with
+\code{type = "arithmetic"} it is \eqn{\sum_s \tilde w_s I_{s,k,t}}, with
+\eqn{\tilde w_s} the weights renormalised over the sources whose cell
+(source, skill) is modelled in week \code{t}. The per-source indices
+(attribute \code{by_source}) do not depend on \code{type}. The exact factorisation
+total x share holds source by source; after aggregation it holds only
+for the geometric mean.
 }
 \examples{
 weeks <- data.table::as.IDate("2024-01-01") + 7L * (0:103)
@@ -94,6 +106,9 @@ sh <- data.table::data.table(
 w <- data.table::data.table(source = c("a", "b"), w = c(2, 1))
 compose_skill_index(tot, sh, "source", "skill", "week", w,
   base_period = c("2024-01-01", "2024-12-31")
+)
+compose_skill_index(tot, sh, "source", "skill", "week", w,
+  base_period = c("2024-01-01", "2024-12-31"), type = "arithmetic"
 )
 
 }

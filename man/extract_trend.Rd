@@ -10,7 +10,7 @@ extract_trend(
   time_col,
   value_col,
   transform = c("log", "logit", "none"),
-  method = c("llt", "ets", "stl"),
+  method = c("llt", "smooth", "ets", "stl"),
   period = 365.25/7,
   harmonics = NULL,
   max_harmonics = 6L,
@@ -30,7 +30,8 @@ for \code{logit}); \code{NA} allowed.}
 
 \item{transform}{Scale of the model: \code{"log"}, \code{"logit"} or \code{"none"}.}
 
-\item{method}{Trend method: \code{"llt"} (reference), \code{"ets"} or \code{"stl"}.}
+\item{method}{Trend method: \code{"llt"} (default), \code{"smooth"} (local linear
+trend with level variance fixed at zero), \code{"ets"} or \code{"stl"}.}
 
 \item{period}{Seasonal period in weeks (default 365.25 / 7).}
 
@@ -42,7 +43,8 @@ it by AICc. Ignored by \code{stl}.}
 
 \item{n_backfit}{Number of backfitting iterations (non-negative integer).}
 
-\item{level}{Confidence level of \code{trend_lo} and \code{trend_hi} (\code{llt} only).}
+\item{level}{Confidence level of \code{trend_lo} and \code{trend_hi} (\code{llt} and
+\code{smooth} only).}
 }
 \value{
 A data.table with columns \code{key_cols}, \code{time_col} (IDate),
@@ -52,7 +54,8 @@ A data.table with columns \code{key_cols}, \code{time_col} (IDate),
 (logical, \code{TRUE} where the input was missing) and \code{method}, ordered by
 key and time. Attribute \code{fits}: one row per key with \code{method}, \code{K},
 \code{aicc}, \code{var_level}, \code{var_slope}, \code{var_obs}, \code{convergence},
-\code{zero_variance}, \code{boundary}, \code{retried}, \code{start}, \code{degenerate},
+\code{zero_variance}, \code{fixed_variance}, \code{boundary}, \code{retried}, \code{start},
+\code{degenerate},
 \code{interpolated}, \code{n_obs}, \code{n_na} and \code{error}. Attributes \code{transform}, \code{key_cols}, \code{time_col} and \code{period}
 record the call.
 }
@@ -67,12 +70,13 @@ jointly with the trend by backfitting.
 \strong{Grid and missing weeks.} Within each key, times must be on a weekly
 grid; missing weeks (absent rows or \code{NA} values, e.g. outlier weeks set
 to \code{NA} upstream) are kept as \code{NA} in \code{observed} and flagged in
-\code{imputed}. The trend at those weeks is the model prediction (\code{llt}) or
+\code{imputed}. The trend at those weeks is the model prediction (\code{llt},
+\code{smooth}) or
 comes from a linear interpolation of the input used for fitting (\code{ets},
 \code{stl}); the per-key flag \code{interpolated} in the \code{fits} attribute marks the
 latter.
 
-\strong{Seasonality.} For \code{llt} and \code{ets}, the seasonal component is
+\strong{Seasonality.} For \code{llt}, \code{smooth} and \code{ets}, the seasonal component is
 \eqn{s_t = \sum_{k=1}^K a_k \sin(2\pi k t/P) + b_k \cos(2\pi k t/P)}, with
 \code{t} the number of weeks since 1970-01-01 (so the phase is common to all
 keys) and \code{P = period}. When \code{harmonics = NULL}, \code{K} ranges over
@@ -92,6 +96,17 @@ on the adjusted series. \code{trend} is the smoothed (two-sided) level from
 \code{stats::KalmanSmooth()}, \code{trend_se} its smoothed standard deviation,
 \code{trend_filtered} the filtered (one-sided) level. \code{NA} weeks are handled
 by the Kalman filter.
+\item \code{smooth}: smooth trend model, the local linear trend of \code{llt} with the
+level disturbance variance fixed at zero
+(\code{stats::StructTS(type = "trend", fixed = c(0, NA, NA))}, parameters in
+the order level, slope, epsilon). The level then has no shocks of its
+own and the trend is an integrated random walk: only the slope changes
+from week to week. Its smoothed level is a cubic-spline-type smoother
+whose smoothness is set by the signal-to-noise ratio
+\code{q = var_slope / var_obs}, estimated by maximum likelihood (no
+smoothing parameter is chosen by hand). Smoothing, \code{trend_se},
+optimiser starts and treatment of \code{NA} weeks are those of \code{llt};
+\code{var_level} is reported as \code{0} and \code{fixed_variance} as \code{"level"}.
 \item \code{ets}: \code{fable::ETS(error("A") + trend(c("A", "Ad")) + season("N"))} on
 the adjusted series, with \code{NA} weeks linearly interpolated (ETS does not
 accept missing values). \code{trend} and \code{trend_filtered} are both the
@@ -107,12 +122,14 @@ component (no Fourier terms, \code{K = NA}) and a 52-week period instead of
 legitimate boundary maximum-likelihood estimate, not a failure: a zero
 slope variance means a deterministic drift, a zero level variance an
 integrated random walk (smooth) trend, a zero observation variance a
-series without measurement noise (e.g. a moving sum). For \code{llt},
-\code{zero_variance} lists the variances at zero (below \code{1e-8} times the
-variance of the first differences) and \code{boundary} is \code{TRUE} when there is
-at least one; for \code{ets}, \code{zero_variance} lists the smoothing parameters
+series without measurement noise (e.g. a moving sum). For \code{llt} and
+\code{smooth}, \code{zero_variance} lists the estimated variances at zero (below
+\code{1e-8} times the variance of the first differences) and \code{boundary} is
+\code{TRUE} when there is at least one; the level variance of \code{smooth} is
+fixed by the model, not estimated, so it is listed in \code{fixed_variance}
+and never in \code{zero_variance} or \code{boundary}; for \code{ets}, \code{zero_variance} lists the smoothing parameters
 (\code{alpha}, \code{beta}) at their lower bound \code{1e-4} and \code{boundary} flags them.
-The \code{llt} likelihood is maximised from two starts: the StructTS default
+The \code{llt} (and \code{smooth}) likelihood is maximised from two starts: the StructTS default
 and the series rescaled to unit standard deviation of its first
 differences, with initial variances (level 0.5, slope 0.01, observation
 0.5) on that scale and an optimiser \code{parscale} of 0.01 for the slope
@@ -142,7 +159,8 @@ understates the uncertainty. Use it on inflow-type series only.
 
 \strong{Cost.} With \code{harmonics = NULL}, each key requires
 \code{(max_harmonics + 1) * (n_backfit + 1)} trend fits (each with two
-optimiser starts for \code{llt}).
+optimiser starts for \code{llt} and \code{smooth}). The AICc counts 3 trend
+parameters for \code{llt} and 2 for \code{smooth}.
 }
 \examples{
 set.seed(1)
@@ -157,5 +175,9 @@ d <- data.table::data.table(
 tr <- extract_trend(d, "source", "week", "n", max_harmonics = 2L)
 head(tr)
 attr(tr, "fits")
+# smooth trend model: level variance fixed at 0
+ts_ <- extract_trend(d, "source", "week", "n", method = "smooth",
+  harmonics = 1L)
+attr(ts_, "fits")[, c("var_level", "var_slope", "var_obs", "fixed_variance")]
 
 }

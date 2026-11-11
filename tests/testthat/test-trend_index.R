@@ -856,3 +856,162 @@ test_that("trend_concordance validates its input", {
     "one row"
   )
 })
+
+# 9. smooth trend model and arithmetic skill composition -----
+
+# Smooth known trend plus heavy Gaussian noise on the log scale.
+sim_smooth <- function(seed, n = 174L, sd = 0.25) {
+  set.seed(seed)
+  weeks <- data.table::as.IDate("2023-05-01") + 7L * (0:(n - 1L))
+  t <- seq_len(n)
+  true <- 5 + 0.002 * t + 0.4 * sin(2 * pi * t / 120)
+  data.table::data.table(
+    source = "a",
+    week = weeks,
+    n = exp(true + stats::rnorm(n, 0, sd)),
+    true = true
+  )
+}
+
+test_that("smooth recovers a smooth trend better than llt on noisy series", {
+  rmse <- vapply(
+    1:10,
+    function(seed) {
+      d <- sim_smooth(seed)
+      tl <- extract_trend(d, "source", "week", "n", harmonics = 0L)
+      ts_ <- extract_trend(
+        d,
+        "source",
+        "week",
+        "n",
+        method = "smooth",
+        harmonics = 0L
+      )
+      c(
+        llt = sqrt(mean((tl$trend - d$true)^2)),
+        smooth = sqrt(mean((ts_$trend - d$true)^2))
+      )
+    },
+    numeric(2)
+  )
+  expect_true(mean(rmse["smooth", ]) < mean(rmse["llt", ]))
+  # the smooth trend is never rougher than the llt one
+  d <- sim_smooth(3L)
+  tl <- extract_trend(d, "source", "week", "n", harmonics = 0L)
+  ts_ <- extract_trend(d, "source", "week", "n", method = "smooth", harmonics = 0L)
+  expect_true(
+    stats::var(diff(ts_$trend, differences = 2L)) <=
+      stats::var(diff(tl$trend, differences = 2L))
+  )
+})
+
+test_that("smooth reports the level variance as fixed, not as boundary", {
+  d <- sim_smooth(1L)
+  ts_ <- extract_trend(d, "source", "week", "n", method = "smooth", harmonics = 0L)
+  f <- attr(ts_, "fits")
+  expect_identical(f$method, "smooth")
+  expect_identical(f$var_level, 0)
+  expect_identical(f$fixed_variance, "level")
+  expect_false(grepl("level", f$zero_variance))
+  expect_true(f$var_slope > 0)
+  expect_true(f$var_obs > 0)
+  expect_false(f$boundary)
+  expect_false(f$degenerate)
+  expect_true(all(ts_$trend_se > 0))
+  expect_true(all(ts_$trend_lo < ts_$trend & ts_$trend < ts_$trend_hi))
+  # llt keeps an empty fixed_variance
+  fl <- attr(extract_trend(d, "source", "week", "n", harmonics = 0L), "fits")
+  expect_identical(fl$fixed_variance, "")
+})
+
+test_that("smooth handles missing weeks and seasonality like llt", {
+  d <- sim_weekly(seed = 4L, sd = 0.05)
+  d[c(1L, 2L, 60L, 61L), n := NA_real_]
+  ts_ <- extract_trend(d, "source", "week", "n", method = "smooth", max_harmonics = 3L)
+  f <- attr(ts_, "fits")
+  expect_true(is.na(f$error))
+  expect_false(f$interpolated)
+  expect_identical(f$n_na, 4L)
+  expect_true(f$K > 0L)
+  expect_false(anyNA(ts_$trend))
+  expect_true(sqrt(mean((ts_$trend - d$true)^2)) < 0.05)
+})
+
+test_that("trend_revisions passes method = 'smooth' through", {
+  d <- sim_smooth(2L, n = 120L)
+  rv <- trend_revisions(
+    d[, list(source, week, n)],
+    "source",
+    "week",
+    "n",
+    origins = d$week[c(110L, 120L)],
+    max_lag = 3L,
+    method = "smooth",
+    harmonics = 0L
+  )
+  expect_equal(rv[origin == max(origin), revision], rep(0, 4L), tolerance = 1e-8)
+})
+
+test_that("compose_skill_index arithmetic matches a hand computation", {
+  tot <- lin_trends()
+  n <- nrow(tot) / 3L
+  sh <- data.table::data.table(
+    source = tot$source,
+    skill = "k1",
+    week = tot$week,
+    trend = stats::qlogis(
+      rep(c(0.10, 0.20, 0.05), each = n) + 0.0005 * rep(seq_len(n), 3L)
+    )
+  )
+  # cell (c, k1) not modelled in the last 10 weeks
+  last <- sort(unique(sh$week), decreasing = TRUE)[1:10]
+  sh[source == "c" & week %in% last, trend := NA_real_]
+  w <- data.table::data.table(source = c("a", "b", "c"), w = c(5, 3, 2))
+  ca <- compose_skill_index(
+    tot,
+    sh,
+    "source",
+    "skill",
+    "week",
+    w,
+    base_2024,
+    type = "arithmetic"
+  )
+  cg <- compose_skill_index(tot, sh, "source", "skill", "week", w, base_2024)
+  bs <- attr(ca, "by_source")
+  # per-source indices do not depend on the aggregation
+  expect_equal(bs$indice, attr(cg, "by_source")$indice, tolerance = 1e-12)
+  # hand computation: weights renormalised over the modelled cells
+  h <- bs[!is.na(indice)]
+  h[w, wt := i.w, on = "source"]
+  h <- h[, list(hand = sum(wt * indice) / sum(wt), n = .N), keyby = week]
+  expect_equal(ca$indice, h$hand, tolerance = 1e-12)
+  expect_identical(ca$n_sources, h$n)
+  expect_equal(ca[week %in% last, unique(covered_weight)], 0.8)
+  # arithmetic mean >= geometric mean in every week
+  expect_true(all(ca$indice >= cg$indice - 1e-9))
+  expect_error(
+    compose_skill_index(tot, sh, "source", "skill", "week", w, base_2024, type = "x"),
+    "should be one of"
+  )
+})
+
+test_that("index_jackknife passes type through to every aggregate", {
+  weeks <- data.table::as.IDate("2024-01-01") + 7L * (0:3)
+  idx <- data.table::data.table(
+    source = rep(c("a", "b", "c"), each = 4),
+    week = rep(weeks, 3),
+    indice = c(100, 120, 140, 160, 100, 90, 80, 70, 100, 100, 101, 101)
+  )
+  w <- data.table::data.table(source = c("a", "b", "c"), w = c(3, 1, 1))
+  ja <- index_jackknife(idx, "source", NULL, "week", w, type = "arithmetic")
+  ag <- aggregate_index(idx, "source", time_col = "week", weights = w, type = "arithmetic")
+  expect_equal(ja$indice, ag$indice, tolerance = 1e-12)
+  # leave out "a": arithmetic mean of b and c with equal weights
+  sub <- idx[source != "a"]
+  manual <- sub[, list(v = mean(indice)), keyby = week]$v
+  expect_true(all(ja$jk_min <= manual + 1e-12 & manual <= ja$jk_max + 1e-12))
+  expect_true(all(ja$jk_min <= ja$indice & ja$indice <= ja$jk_max))
+  jg <- index_jackknife(idx, "source", NULL, "week", w)
+  expect_false(isTRUE(all.equal(ja$jk_max, jg$jk_max)))
+})

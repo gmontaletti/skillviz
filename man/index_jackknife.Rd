@@ -10,7 +10,9 @@ index_jackknife(idx, source_col, key_cols, time_col, weights, ...)
 \item{idx, source_col, key_cols, time_col, weights}{As in \code{\link[=aggregate_index]{aggregate_index()}}.}
 
 \item{...}{Further arguments passed to \code{\link[=aggregate_index]{aggregate_index()}} (\code{index_col},
-\code{type}, \code{cap}).}
+\code{type}, \code{cap}), used both for the full index and for every
+leave-one-out index: with \code{type = "arithmetic"} the range refers to
+arithmetic aggregates.}
 }
 \value{
 A data.table with columns \code{key_cols}, \code{time_col}, the full index
@@ -25,7 +27,8 @@ source at a time and reports the range of the results and the source
 whose removal moves the index most.
 }
 \details{
-Without cap, the full weighted (log-)mean is a convex combination of the
+Without cap, the full weighted mean (of logs for \code{type = "geometric"},
+of indices for \code{"arithmetic"}) is a convex combination of the
 leave-one-out means, so the full index always lies in
 \verb{[jk_min, jk_max]}. In cells where a single source is present, removing
 it leaves no index; such leave-one-out values are ignored.
