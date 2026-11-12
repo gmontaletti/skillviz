@@ -46,6 +46,7 @@ Suggests:
     RPostgres,
     DBI,
     lubridate,
+    mgcv,
     knitr,
     rmarkdown,
     testthat (>= 3.0.0),
