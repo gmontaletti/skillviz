@@ -935,7 +935,10 @@ whittaker_smooth <- function(
   ct <- c(1L, grep("^s\\(t\\)", colnames(Xp)))
   trend <- drop(Xp[, ct, drop = FALSE] %*% cf[ct])
   Vt <- f$Vp[ct, ct, drop = FALSE]
-  se <- sqrt(pmax(rowSums((Xp[, ct, drop = FALSE] %*% Vt) * Xp[, ct, drop = FALSE]), 0))
+  se <- sqrt(pmax(
+    rowSums((Xp[, ct, drop = FALSE] %*% Vt) * Xp[, ct, drop = FALSE]),
+    0
+  ))
   seasonal <- if (K2 > 0L) drop(X %*% cf[fn]) else rep(0, n)
   list(
     seasonal = seasonal,
@@ -1050,12 +1053,23 @@ whittaker_smooth <- function(
 
   # band half-width
   model_band <- f$kalman && o$band == "model"
+  band_defined <- TRUE
   if (model_band) {
-    P <- trend_se^2
-    ht <- if (is.null(f$h_t)) rep(f$h_hat, n) else f$h_t
-    kk <- ifelse(used, pmin(P / ht, 1), 0)
-    ve <- (1 - kk)^2 * f$h_hat + P * (1 - kk)
-    half <- o$z * sqrt(pmax(ve, 0))
+    # with h -> 0 the model interpolates the data: k_t = P_t|n / h_t is 0/0
+    # where P_t|n = 0 and the auxiliary residual has no variance, so the
+    # band is undefined (half-width NA) rather than NaN or zero
+    h_tol <- 1e-8 * max(.ti_var(yk), .Machine$double.eps, na.rm = TRUE)
+    band_defined <- is.finite(f$h_hat) && f$h_hat > h_tol
+    if (band_defined) {
+      P <- pmax(trend_se^2, 0)
+      ht <- if (is.null(f$h_t)) rep(f$h_hat, n) else f$h_t
+      kk <- ifelse(used & ht > 0, pmin(pmax(P / ht, 0), 1), 0)
+      ve <- (1 - kk)^2 * f$h_hat + P * (1 - kk)
+      # negative values can only come from rounding
+      half <- o$z * sqrt(pmax(ve, 0))
+    } else {
+      half <- rep(NA_real_, n)
+    }
   } else {
     r <- (y - fitted)[used]
     half <- rep(o$k * stats::mad(r, constant = 1.4826), n)
@@ -1069,14 +1083,20 @@ whittaker_smooth <- function(
     K = K,
     aicc = ks$aicc,
     band = if (model_band) "model" else "mad",
+    band_defined = band_defined,
     f = f
   )
 }
 
 #' Flags against a pass: observed weeks outside the band
+#'
+#' All NA when the band of the pass is undefined.
 #' @keywords internal
 #' @noRd
 .rs_flags <- function(y, fp) {
+  if (!fp$band_defined) {
+    return(rep(NA, length(y)))
+  }
   d <- abs(y - fp$seasonal - fp$trend)
   !is.na(y) & !is.na(d) & d > fp$half
 }
@@ -1146,6 +1166,10 @@ whittaker_smooth <- function(
   fp <- .rs_fit_pass(y, excl, tw, method, o, NULL)
   fl <- .rs_flags(y, fp)
   na_of <- function(fl, fp) {
+    if (!fp$band_defined) {
+      # no band, no flags: keep the current exclusions and stop
+      return(excl)
+    }
     if (o$flag_na == "all") {
       return(fl)
     }
@@ -1180,7 +1204,15 @@ whittaker_smooth <- function(
   if (!converged && p > o$max_iter) {
     converged <- identical(na_of(fl, fp), excl)
   }
-  fr <- .rs_flag_runs(fl, y - fp$seasonal, fp$half, o$run_min)
+  if (!fp$band_defined) {
+    converged <- NA
+  }
+  fr <- .rs_flag_runs(
+    if (fp$band_defined) fl else rep(FALSE, n),
+    y - fp$seasonal,
+    fp$half,
+    o$run_min
+  )
   fits <- data.table::rbindlist(rec)
   data.table::set(fits, j = "final", value = fits$pass == p)
   data.table::set(fits, j = "converged", value = converged)
@@ -1221,6 +1253,7 @@ whittaker_smooth <- function(
     var_slope = as.numeric(f$var_slope),
     var_obs = as.numeric(f$var_obs),
     band = fp$band,
+    band_defined = fp$band_defined,
     n_excluded = sum(excl),
     n_flag = sum(fl),
     iterations = as.integer(f$iterations)
@@ -1303,6 +1336,13 @@ whittaker_smooth <- function(
 #' fit (\eqn{k_t = 0}). For `smooth_t`, \eqn{h_t = \hat h / w_t}: a
 #' down-weighted week is judged against the scale \eqn{\hat h}, not against
 #' its inflated \eqn{h_t}. The seasonal coefficients are treated as known.
+#' Negative values of \eqn{v_t} from rounding are set to 0. When
+#' \eqn{\hat h} is not finite or not above `1e-8` times the variance of
+#' the series of the pass (the ML fit interpolates the data, as happens for
+#' `level` and `llt` when the observation variance is estimated at 0), the
+#' band is undefined: `band_lo`, `band_hi` and the flags of the key are
+#' `NA`, no further pass is run, `band_defined` is `FALSE` in `fits`,
+#' `converged` is `NA`, and a single warning lists the keys concerned.
 #' Non-Kalman methods with `band = "model"`, and every method with
 #' `band = "mad"`, use `trend + seasonal +/- k * 1.4826 * MAD(remainder)`,
 #' the MAD computed on the weeks used in the fit of that pass.
@@ -1373,7 +1413,7 @@ whittaker_smooth <- function(
 #'   and `method`. Attributes: `fits` (one row per key x pass with `pass`,
 #'   `K`, `aicc_K`, `parameter`, `value`, `criterion`, `criterion_value`,
 #'   `edf`, `rho`, `ic_ratio`, `var_level`, `var_slope`, `var_obs`, `band`,
-#'   `n_excluded`, `n_flag`, `iterations` (IRLS, `smooth_t`), `final`,
+#'   `band_defined`, `n_excluded`, `n_flag`, `iterations` (IRLS, `smooth_t`), `final`,
 #'   `converged`, `error`), `flags` (one row per run of `flag` with `start`,
 #'   `end`, `n_weeks`, `flag_type`, `shift`, `half_width`), `transform`,
 #'   `observed_transform`, `key_cols`, `time_col`, `period`, `method` and
@@ -1517,7 +1557,10 @@ robust_smooth <- function(
   num_cols <- c("seasonal", "trend", "trend_se", "trend_pass1", ".half")
   lgl_cols <- c("excluded", "flag_1", "flag_2", "flag")
   res <- c(
-    stats::setNames(lapply(num_cols, function(i) rep(NA_real_, n_row)), num_cols),
+    stats::setNames(
+      lapply(num_cols, function(i) rep(NA_real_, n_row)),
+      num_cols
+    ),
     stats::setNames(lapply(lgl_cols, function(i) rep(NA, n_row)), lgl_cols),
     list(
       flag_type = rep(NA_character_, n_row),
@@ -1530,6 +1573,7 @@ robust_smooth <- function(
   fit_list <- vector("list", nrow(rng))
   run_list <- vector("list", nrow(rng))
   n_fail <- 0L
+  no_band <- character(0)
   for (g in seq_len(nrow(rng))) {
     idx <- rng$.first[g]:rng$.last[g]
     out <- tryCatch(
@@ -1541,7 +1585,10 @@ robust_smooth <- function(
       n_fail <- n_fail + 1L
       fit_list[[g]] <- cbind(
         kg,
-        data.table::data.table(pass = NA_integer_, error = conditionMessage(out))
+        data.table::data.table(
+          pass = NA_integer_,
+          error = conditionMessage(out)
+        )
       )
       next
     }
@@ -1551,6 +1598,12 @@ robust_smooth <- function(
     res$.half[idx] <- out$half
     res$pass[idx] <- out$pass
     fits_g <- out$fits
+    if (!all(fits_g$band_defined)) {
+      no_band <- c(
+        no_band,
+        paste(vapply(kg, as.character, character(1)), collapse = "/")
+      )
+    }
     data.table::set(fits_g, j = "error", value = NA_character_)
     fit_list[[g]] <- cbind(kg[rep(1L, nrow(fits_g))], fits_g)
     if (nrow(out$runs) > 0L) {
@@ -1607,6 +1660,17 @@ robust_smooth <- function(
       ": the fit failed for ",
       n_fail,
       " key(s); their components are NA (see attr(, 'fits')$error)",
+      call. = FALSE
+    )
+  }
+  if (length(no_band) > 0L) {
+    warning(
+      caller,
+      ": method '",
+      method,
+      "': the model band is undefined (observation variance ~ 0) for key(s) ",
+      paste(no_band, collapse = ", "),
+      "; their flags are NA (see attr(, 'fits')$band_defined)",
       call. = FALSE
     )
   }

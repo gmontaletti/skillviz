@@ -85,7 +85,7 @@ weeks), \code{seasonal}, \code{trend}, \code{trend_se} (\code{NA} for \code{hend
 and \code{method}. Attributes: \code{fits} (one row per key x pass with \code{pass},
 \code{K}, \code{aicc_K}, \code{parameter}, \code{value}, \code{criterion}, \code{criterion_value},
 \code{edf}, \code{rho}, \code{ic_ratio}, \code{var_level}, \code{var_slope}, \code{var_obs}, \code{band},
-\code{n_excluded}, \code{n_flag}, \code{iterations} (IRLS, \code{smooth_t}), \code{final},
+\code{band_defined}, \code{n_excluded}, \code{n_flag}, \code{iterations} (IRLS, \code{smooth_t}), \code{final},
 \code{converged}, \code{error}), \code{flags} (one row per run of \code{flag} with \code{start},
 \code{end}, \code{n_weeks}, \code{flag_type}, \code{shift}, \code{half_width}), \code{transform},
 \code{observed_transform}, \code{key_cols}, \code{time_col}, \code{period}, \code{method} and
@@ -165,6 +165,13 @@ trend: it equals \eqn{\hat h - P_{t|n}} when \eqn{h_t = \hat h}, and
 fit (\eqn{k_t = 0}). For \code{smooth_t}, \eqn{h_t = \hat h / w_t}: a
 down-weighted week is judged against the scale \eqn{\hat h}, not against
 its inflated \eqn{h_t}. The seasonal coefficients are treated as known.
+Negative values of \eqn{v_t} from rounding are set to 0. When
+\eqn{\hat h} is not finite or not above \code{1e-8} times the variance of
+the series of the pass (the ML fit interpolates the data, as happens for
+\code{level} and \code{llt} when the observation variance is estimated at 0), the
+band is undefined: \code{band_lo}, \code{band_hi} and the flags of the key are
+\code{NA}, no further pass is run, \code{band_defined} is \code{FALSE} in \code{fits},
+\code{converged} is \code{NA}, and a single warning lists the keys concerned.
 Non-Kalman methods with \code{band = "model"}, and every method with
 \code{band = "mad"}, use \verb{trend + seasonal +/- k * 1.4826 * MAD(remainder)},
 the MAD computed on the weeks used in the fit of that pass.

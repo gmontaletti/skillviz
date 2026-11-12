@@ -342,3 +342,38 @@ test_that("robust_smooth validates its input and isolates failed keys", {
   expect_false(anyNA(rs[source == "a", trend]))
   expect_match(attr(rs, "fits")[source == "b", error], "fewer than 8")
 })
+
+test_that("model band is undefined, not NaN, when the observation variance is 0", {
+  # a noiseless random walk: the ML local level has var_obs = 0
+  set.seed(5)
+  n <- 120L
+  d <- data.table::data.table(
+    source = "rw",
+    week = data.table::as.IDate("2023-01-02") + 7L * (0:(n - 1L)),
+    n = 6 + cumsum(stats::rnorm(n, 0, 0.1))
+  )
+  for (m in c("level", "llt")) {
+    expect_warning(
+      rs <- robust_smooth(d, "source", "week", "n", method = m,
+        harmonics = 0L, transform = "none"),
+      "band is undefined.*rw",
+      info = m
+    )
+    fits <- attr(rs, "fits")
+    expect_equal(fits$var_obs, 0, tolerance = 1e-10, info = m)
+    expect_identical(fits$band_defined, FALSE, info = m)
+    expect_identical(fits$converged, NA, info = m)
+    expect_false(any(is.nan(rs$band_lo)), info = m)
+    expect_true(all(is.na(rs$band_lo) & is.na(rs$band_hi)), info = m)
+    expect_true(all(is.na(rs$flag)), info = m)
+    expect_identical(nrow(attr(rs, "flags")), 0L, info = m)
+    expect_false(anyNA(rs$trend), info = m)
+  }
+  # a defined band is reported as such and gives no warning
+  d2 <- sim_rs(n = 120L, spikes = integer(0), trough = integer(0))
+  expect_no_warning(
+    rs2 <- robust_smooth(d2, "source", "week", "n", method = "level",
+      harmonics = 1L)
+  )
+  expect_true(all(attr(rs2, "fits")$band_defined))
+})
