@@ -1,4 +1,58 @@
-# skillviz 0.7.0
+# skillviz 0.8.0
+
+## Stock di annunci aperti
+
+* Nuove funzioni per lo stock giornaliero degli annunci aperti:
+  - `events_from_intervals()` converte gli intervalli di pubblicazione in una
+    tabella di eventi (ingressi e uscite);
+  - `stock_from_events()` calcola lo stock giornaliero di annunci aperti come
+    somma progressiva degli ingressi meno le uscite;
+  - `duration_survival()` restituisce la funzione di sopravvivenza delle
+    durate degli annunci per gruppo;
+  - `standardized_stock()` calcola lo stock che il flusso osservato genererebbe
+    con una durata standardizzata;
+  - `to_weekly()` aggrega le serie giornaliere a settimane di calendario.
+
+## Stima del trend e indici
+
+* Nuove funzioni per il trend di serie settimanali per fonte e per gli indici
+  composti:
+  - `extract_trend()` stima il trend con i metodi `"llt"` (default), `"smooth"`
+    (trend locale lineare con varianza del livello nulla), `"ets"` e `"stl"`,
+    con stagionalità di Fourier; i casi di massima verosimiglianza al bordo
+    dello spazio dei parametri sono segnalati come `boundary`, distinti dai
+    tentativi falliti segnalati come `degenerate`;
+  - `trend_diagnostics()` riassume, per chiave, la quota del movimento della
+    serie destagionalizzata spiegata dal trend;
+  - `trend_revisions()` misura le revisioni del trend quando arrivano nuovi
+    dati, rieseguendo `extract_trend()` su dati troncati;
+  - `trend_index()` trasforma il trend in un indice in base fissa;
+  - `aggregate_index()` aggrega gli indici di fonte con pesi fissi, geometrici
+    o aritmetici;
+  - `index_jackknife()` restituisce l'intervallo dell'indice aggregato
+    escludendo una fonte per volta;
+  - `trend_concordance()` misura quanto le fonti si muovono nella stessa
+    direzione;
+  - `compose_skill_index()` costruisce l'indice di una competenza come
+    prodotto dell'indice di stock totale e della quota della competenza.
+
+## Lisciamento
+
+* Nuove funzioni di lisciamento, in `R/smoothers.R`:
+  - `henderson_weights()` e `henderson_filter()` implementano il filtro di
+    Henderson con pesi di Musgrave alle estremità; la lunghezza è scelta per
+    GCV fra i valori candidati, oppure fissata dall'utente;
+  - `whittaker_smooth()` implementa il lisciamento di Whittaker-Henderson con
+    parametro di lisciamento scelto per GCV;
+  - `robust_smooth()` lisci una serie in passate successive, individuando gli
+    outlier con la regola MAD o con pesi t di Student; restituisce bande
+    attorno ai valori lisciati e colonne `weight` e `flag_weight`. Il metodo
+    `"smooth_t"` usa un filtro di Kalman robusto, con `q` scelto per profilo
+    della verosimiglianza (`q_select = "profile_t"`) e, opzionalmente, uno
+    smorzamento della pendenza (`damping = "profile"`);
+  - con varianza delle osservazioni nulla, la banda del modello è ora `NA`
+    (banda indefinita) invece di `NaN`.
+* `mgcv` è aggiunto a `Suggests`.
 
 ## Intervalli delle quote
 
