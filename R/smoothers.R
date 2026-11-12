@@ -477,7 +477,9 @@ whittaker_smooth <- function(
   "flag",
   "flag_type",
   "pass",
-  "method"
+  "method",
+  "weight",
+  "flag_weight"
 )
 
 #' Empty description of a trend fit (filled by each method)
@@ -499,7 +501,14 @@ whittaker_smooth <- function(
     var_level = NA_real_,
     var_slope = NA_real_,
     var_obs = NA_real_,
-    iterations = NA_integer_
+    iterations = NA_integer_,
+    weights = NULL,
+    irls_converged = NA,
+    q_select = NA_character_,
+    phi = NA_real_,
+    loglik_profile = NA_real_,
+    q_at_edge = NA,
+    phi_at_edge = NA
   )
   utils::modifyList(base, list(...))
 }
@@ -689,23 +698,29 @@ whittaker_smooth <- function(
   )
 }
 
-#' Kalman filter and fixed-interval smoother for a local linear trend with
-#' level variance 0 and time-varying observation variance
+#' Kalman filter and fixed-interval smoother for a (damped) smooth trend
+#' with level variance 0 and time-varying observation variance
 #'
-#' State (level, slope), T = ((1, 1), (0, 1)) by rows, Z = (1, 0),
-#' Q = diag(0, var_slope), observation variance `h` (vector). NA weeks are
-#' skipped in the update. The initial state is the one of .ti_trend_llt()
-#' (StructTS model0 with a = (first observed value, 0) and every entry of P
-#' equal to 1e4 * var(x), at time 0, predicted to time 1 as KalmanSmooth()
-#' does), so that with constant `h` the result equals the KalmanSmooth()
-#' output of the `smooth` method. The backward pass is the
-#' de Jong / Durbin-Koopman form of the fixed-interval smoother, which gives
-#' the same smoothed moments as the Rauch-Tung-Striebel recursion without
-#' inverting the predicted covariance (singular under that initial state).
-#' Returns the smoothed level and its variance.
+#' State (level, slope), T = ((1, 1), (0, phi)) by rows, Z = (1, 0),
+#' Q = diag(0, var_slope), observation variance `h` (vector). With
+#' `phi = 1` (default) this is the smooth trend model; `phi < 1` damps the
+#' slope, slope_{t+1} = phi * slope_t + eta_t. NA weeks are skipped in the
+#' update. The initial state is the one of .ti_trend_llt() (StructTS model0
+#' with a = (first observed value, 0) and every entry of P equal to
+#' 1e4 * var(x), at time 0, predicted to time 1 with T as KalmanSmooth()
+#' does), so that with constant `h` and `phi = 1` the result equals the
+#' KalmanSmooth() output of the `smooth` method; the same diffuse start is
+#' used for every `phi`. The backward pass is the de Jong / Durbin-Koopman
+#' form of the fixed-interval smoother, which gives the same smoothed
+#' moments as the Rauch-Tung-Striebel recursion without inverting the
+#' predicted covariance (singular under that initial state). With
+#' `phi = 1` every multiplication by `phi` is exact, so the output is the
+#' one of the undamped recursion.
+#' Returns the smoothed level and its variance, and the one-step prediction
+#' errors `v` and their variances `F` (NA on missing weeks).
 #' @keywords internal
 #' @noRd
-.rs_kf_smooth <- function(x, h, var_slope) {
+.rs_kf_smooth <- function(x, h, var_slope, phi = 1) {
   n <- length(x)
   kap <- 1e4 * max(stats::var(x, na.rm = TRUE), .Machine$double.eps)
   # predicted states and covariances, innovations
@@ -716,8 +731,8 @@ whittaker_smooth <- function(
   a2 <- 0
   # StructTS convention: (a, P) refer to time 0 and are predicted to t = 1
   p11 <- 4 * kap
-  p12 <- 2 * kap
-  p22 <- kap + var_slope
+  p12 <- 2 * phi * kap
+  p22 <- phi^2 * kap + var_slope
   for (t in seq_len(n)) {
     ap1[t] <- a1
     ap2[t] <- a2
@@ -740,13 +755,14 @@ whittaker_smooth <- function(
     af1[t] <- a1
     pf11[t] <- p11
     pf12[t] <- p12
-    # predict t + 1
+    # predict t + 1: a <- T a, P <- T P T' + Q
     a1 <- a1 + a2
+    a2 <- phi * a2
     q11 <- p11 + 2 * p12 + p22
-    q12 <- p12 + p22
+    q12 <- phi * (p12 + p22)
     p11 <- q11
     p12 <- q12
-    p22 <- p22 + var_slope
+    p22 <- phi^2 * p22 + var_slope
   }
   # backward smoother: r, N
   r1 <- r2 <- 0
@@ -754,35 +770,36 @@ whittaker_smooth <- function(
   lev <- vlev <- numeric(n)
   for (t in rev(seq_len(n))) {
     # smoothed level from the filtered moments and r_t, N_t:
-    # a_t|n = a_t|t + (T P_t|t)' r_t, V_t|n = P_t|t - (T P_t|t)' N_t (T P_t|t)
-    # (first column only; no cancellation with a diffuse start)
+    # a_t|n = a_t|t + (P_t|t T')' r_t, V_t|n = P_t|t - c' N_t c with c the
+    # first row of P_t|t T' (no cancellation with a diffuse start)
     c1 <- pf11[t] + pf12[t]
-    c2 <- pf12[t]
+    c2 <- phi * pf12[t]
     lev[t] <- af1[t] + c1 * r1 + c2 * r2
     vlev[t] <- pf11[t] - (c1^2 * n11 + 2 * c1 * c2 * n12 + c2^2 * n22)
     if (!is.na(vv[t])) {
       f <- ff[t]
       k1 <- (pp11[t] + pp12[t]) / f
-      k2 <- pp12[t] / f
-      # L = [[1 - k1, 1], [-k2, 1]]
+      k2 <- phi * pp12[t] / f
+      # L = T - K Z = [[1 - k1, 1], [-k2, phi]]
       l11 <- 1 - k1
       l21 <- -k2
       nr1 <- vv[t] / f + l11 * r1 + l21 * r2
-      nr2 <- r1 + r2
+      nr2 <- r1 + phi * r2
       # L' N L
       a11 <- l11 * n11 + l21 * n12
       a12 <- l11 * n12 + l21 * n22
-      a21 <- n11 + n12
-      a22 <- n12 + n22
+      a21 <- n11 + phi * n12
+      a22 <- n12 + phi * n22
       m11 <- a11 * l11 + a12 * l21 + 1 / f
-      m12 <- a11 + a12
-      m22 <- a21 + a22
+      m12 <- a11 + a12 * phi
+      m22 <- a21 + a22 * phi
     } else {
+      # L = T
       nr1 <- r1
-      nr2 <- r1 + r2
+      nr2 <- r1 + phi * r2
       m11 <- n11
-      m12 <- n11 + n12
-      m22 <- n11 + 2 * n12 + n22
+      m12 <- n11 + phi * n12
+      m22 <- n11 + 2 * phi * n12 + phi^2 * n22
     }
     r1 <- nr1
     r2 <- nr2
@@ -790,19 +807,33 @@ whittaker_smooth <- function(
     n12 <- m12
     n22 <- m22
   }
-  list(level = lev, var_level = pmax(vlev, 0))
+  list(level = lev, var_level = pmax(vlev, 0), v = vv, F = ff)
+}
+
+#' Diffuse Gaussian log-likelihood by prediction-error decomposition
+#'
+#' From the prediction errors `v` and variances `F` of .rs_kf_smooth(); the
+#' first `n_diffuse` observed errors (the diffuse elements of the initial
+#' state) are left out, so that values are comparable across models with
+#' the same number of diffuse states.
+#' @keywords internal
+#' @noRd
+.rs_kf_loglik <- function(kf, n_diffuse = 2L) {
+  i <- which(!is.na(kf$v))
+  i <- i[-seq_len(min(n_diffuse, length(i)))]
+  -0.5 * sum(log(2 * pi * kf$F[i]) + kf$v[i]^2 / kf$F[i])
 }
 
 #' IRLS of the robust (Student-t) smooth trend for a fixed seasonal
 #' @keywords internal
 #' @noRd
-.rs_irls <- function(x, w, h, q, nu, max_irls = 20L, tol = 1e-4) {
+.rs_irls <- function(x, w, h, q, nu, max_irls = 20L, tol = 1e-4, phi = 1) {
   ok <- !is.na(x)
   n_ok <- sum(ok)
   it <- 0L
   repeat {
     it <- it + 1L
-    ks <- .rs_kf_smooth(x, h / w, q * h)
+    ks <- .rs_kf_smooth(x, h / w, q * h, phi)
     e <- x - ks$level
     m2 <- e^2 + ks$var_level
     w_new <- rep(1, length(x))
@@ -817,6 +848,79 @@ whittaker_smooth <- function(
   list(w = w, h = h, iterations = it, converged = done)
 }
 
+#' Backfitting of the robust smooth trend and the Fourier seasonal
+#'
+#' Starting from the seasonal `s` and observation variance `h`, with `q`
+#' and `phi` fixed: `n_backfit` times (only when `X` is not NULL) the IRLS
+#' on y - s, then the seasonal by weighted least squares on y - trend;
+#' finally the IRLS and the smoother on y - s.
+#' @keywords internal
+#' @noRd
+.rs_t_backfit <- function(y, X, s, h, q, phi, nu, n_backfit) {
+  n <- length(y)
+  ok <- !is.na(y)
+  w <- rep(1, n)
+  for (i in seq_len(if (is.null(X)) 0L else n_backfit)) {
+    ir <- .rs_irls(y - s, w, h, q, nu, phi = phi)
+    w <- ir$w
+    h <- ir$h
+    tr <- .rs_kf_smooth(y - s, h / w, q * h, phi)$level
+    b <- stats::lm.wfit(
+      cbind(1, X)[ok, , drop = FALSE],
+      (y - tr)[ok],
+      w[ok]
+    )$coefficients
+    b[is.na(b)] <- 0
+    s <- drop(X %*% b[-1L])
+  }
+  ir <- .rs_irls(y - s, w, h, q, nu, phi = phi)
+  list(
+    seasonal = s,
+    ir = ir,
+    kf = .rs_kf_smooth(y - s, ir$h / ir$w, q * ir$h, phi)
+  )
+}
+
+#' Profile objective of the robust smooth trend over a (q, phi) grid
+#'
+#' For each pair, the IRLS (EM) on `x` (seasonally adjusted, seasonal
+#' fixed) from w = 1 and the Gaussian `h0`, then
+#' L(q, phi) = diffuse Gaussian log-likelihood of `x` under h_t = h / w_t
+#' and slope variance q * h (first 2 prediction errors left out) +
+#' sum over observed weeks of log dgamma(w_t, nu / 2, nu / 2).
+#' Returns the grid with the objective and the argmax.
+#' @keywords internal
+#' @noRd
+.rs_t_profile <- function(x, h0, nu, qs, phis) {
+  ok <- !is.na(x)
+  n <- length(x)
+  grid <- expand.grid(q = qs, phi = phis, KEEP.OUT.ATTRS = FALSE)
+  obj <- vapply(
+    seq_len(nrow(grid)),
+    function(i) {
+      q <- grid$q[i]
+      phi <- grid$phi[i]
+      ir <- .rs_irls(x, rep(1, n), h0, q, nu, phi = phi)
+      kf <- .rs_kf_smooth(x, ir$h / ir$w, q * ir$h, phi)
+      .rs_kf_loglik(kf, 2L) +
+        sum(stats::dgamma(ir$w[ok], nu / 2, rate = nu / 2, log = TRUE))
+    },
+    numeric(1)
+  )
+  fin <- is.finite(obj)
+  if (!any(fin)) {
+    stop("smooth_t: the profile objective is not finite on the grid",
+      call. = FALSE)
+  }
+  pick <- which(fin)[which.max(obj[fin])]
+  list(
+    q = grid$q[pick],
+    phi = grid$phi[pick],
+    objective = obj[pick],
+    path = data.table::data.table(q = grid$q, phi = grid$phi, objective = obj)
+  )
+}
+
 #' Robust smooth trend (Student-t observation errors) by IRLS
 #'
 #' Starts from the ML fit of the smooth trend model `ks` (output of
@@ -826,46 +930,48 @@ whittaker_smooth <- function(
 #' sets w_t = (nu + 1) / (nu + s_t^2) with s_t^2 = (e_t^2 + P_t|n) / h
 #' (EM weights of the Student-t model: e_t auxiliary residual, P_t|n
 #' smoothed level variance) and re-estimates h as the weighted mean of
-#' e_t^2 + P_t|n. q is kept, so the smoothing of the ML fit is kept and only
-#' the weights change. Seasonality by backfitting with weighted least
-#' squares.
+#' e_t^2 + P_t|n. Seasonality by backfitting with weighted least squares.
+#'
+#' With o$q_select = "gaussian" q is the one of the ML fit and phi = 1.
+#' With "profile_t", (q, phi) maximise the profile objective of
+#' .rs_t_profile() on the grid (phi = 1 unless o$damping = "profile"). To
+#' keep the cost at one IRLS per grid point, the seasonal is estimated once
+#' by the backfitting at the Gaussian q (phi = 1) and kept fixed during the
+#' grid search; the full backfitting is then run at the selected (q, phi),
+#' from the seasonal of the ML fit as in the "gaussian" case.
 #' @keywords internal
 #' @noRd
-.rs_smooth_t <- function(y, X, ks, nu, n_backfit) {
-  n <- length(y)
-  ok <- !is.na(y)
+.rs_smooth_t <- function(y, X, ks, o) {
+  nu <- o$nu
   h <- ks$var_obs
   if (!is.finite(h) || h <= 0) {
     h <- max(.ti_var(diff(y)) / 2, .Machine$double.eps, na.rm = TRUE)
   }
   q <- max(ks$var_slope, 0) / h
-  s <- ks$seasonal
-  w <- rep(1, n)
-  for (i in seq_len(if (is.null(X)) 0L else n_backfit)) {
-    ir <- .rs_irls(y - s, w, h, q, nu)
-    w <- ir$w
-    h <- ir$h
-    tr <- .rs_kf_smooth(y - s, h / w, q * h)$level
-    b <- stats::lm.wfit(
-      cbind(1, X)[ok, , drop = FALSE],
-      (y - tr)[ok],
-      w[ok]
-    )$coefficients
-    b[is.na(b)] <- 0
-    s <- drop(X %*% b[-1L])
+  phi <- 1
+  prof <- NULL
+  if (o$q_select == "profile_t") {
+    s_a <- .rs_t_backfit(y, X, ks$seasonal, h, q, 1, nu, o$n_backfit)$seasonal
+    phis <- if (o$damping == "profile") o$phi_grid else 1
+    qs <- 10^o$log10_q_grid
+    prof <- .rs_t_profile(y - s_a, h, nu, qs, phis)
+    q <- prof$q
+    phi <- prof$phi
   }
-  ir <- .rs_irls(y - s, w, h, q, nu)
+  bf <- .rs_t_backfit(y, X, ks$seasonal, h, q, phi, nu, o$n_backfit)
+  ir <- bf$ir
   w <- ir$w
   h <- ir$h
-  ks2 <- .rs_kf_smooth(y - s, h / w, q * h)
+  ks2 <- bf$kf
   list(
-    seasonal = s,
+    seasonal = bf$seasonal,
     fit = .rs_fit_info(
       trend = ks2$level,
       trend_se = sqrt(ks2$var_level),
       kalman = TRUE,
       h_hat = h,
       h_t = h / w,
+      weights = w,
       parameter = "q",
       value = q,
       criterion = "loglik",
@@ -873,7 +979,21 @@ whittaker_smooth <- function(
       var_level = 0,
       var_slope = q * h,
       var_obs = h,
-      iterations = ir$iterations
+      iterations = ir$iterations,
+      irls_converged = ir$converged,
+      q_select = o$q_select,
+      phi = phi,
+      loglik_profile = if (is.null(prof)) NA_real_ else prof$objective,
+      q_at_edge = if (is.null(prof)) {
+        NA
+      } else {
+        q == min(qs) || q == max(qs)
+      },
+      phi_at_edge = if (o$damping == "profile") {
+        phi == min(o$phi_grid) && phi < 1
+      } else {
+        NA
+      }
     )
   )
 }
@@ -1042,7 +1162,7 @@ whittaker_smooth <- function(
     ),
     whittaker = .rs_backfit(yk, X, .rs_whittaker, o$n_backfit, used),
     gam_ar1 = .rs_gam(yk, X, o$rhos),
-    smooth_t = .rs_smooth_t(yk, X, ks, o$nu, o$n_backfit)
+    smooth_t = .rs_smooth_t(yk, X, ks, o)
   )
   f <- res$fit
   n <- length(y)
@@ -1084,6 +1204,11 @@ whittaker_smooth <- function(
     aicc = ks$aicc,
     band = if (model_band) "model" else "mad",
     band_defined = band_defined,
+    weight = if (is.null(f$weights)) {
+      rep(NA_real_, n)
+    } else {
+      ifelse(used, f$weights, NA_real_)
+    },
     f = f
   )
 }
@@ -1228,6 +1353,7 @@ whittaker_smooth <- function(
     flag = fl,
     flag_type = fr$type,
     pass = p,
+    weight = fp$weight,
     fits = fits,
     runs = fr$runs
   )
@@ -1256,7 +1382,13 @@ whittaker_smooth <- function(
     band_defined = fp$band_defined,
     n_excluded = sum(excl),
     n_flag = sum(fl),
-    iterations = as.integer(f$iterations)
+    iterations = as.integer(f$iterations),
+    irls_converged = as.logical(f$irls_converged),
+    q_select = as.character(f$q_select),
+    phi = as.numeric(f$phi),
+    loglik_profile = as.numeric(f$loglik_profile),
+    q_at_edge = as.logical(f$q_at_edge),
+    phi_at_edge = as.logical(f$phi_at_edge)
   )
 }
 
@@ -1320,9 +1452,40 @@ whittaker_smooth <- function(
 #'   \eqn{s_t^2 = (e_t^2 + P_{t|n}) / \hat h} (EM weights; \eqn{e_t} the
 #'   auxiliary residual, \eqn{P_{t|n}} the smoothed level variance), and
 #'   \eqn{\hat h} re-estimated as the weighted mean of
-#'   \eqn{e_t^2 + P_{t|n}}. `q` is kept fixed, so the smoothness of the ML
-#'   fit is kept and only the weights change. The seasonal coefficients are
-#'   re-estimated by weighted least squares in the backfitting.
+#'   \eqn{e_t^2 + P_{t|n}}. With `q_select = "gaussian"` (default) `q` is
+#'   kept fixed, so the smoothness of the ML fit is kept and only the
+#'   weights change. The seasonal coefficients are re-estimated by weighted
+#'   least squares in the backfitting. The final weights are returned in
+#'   `weight`.
+#'
+#' **`smooth_t`: q under the t model and damped slope.** With
+#' `q_select = "profile_t"`, `q` is chosen on the grid
+#' \eqn{10^g}, `g` in `log10_q_grid`, by maximising
+#' \deqn{L(q, \phi) = \ell_G(q, \phi; h_t = \hat h / w_t) +
+#'   \sum_t \log \mathrm{Gamma}(w_t; \nu/2, \nu/2),}
+#' where, for each grid point, the IRLS is run to convergence from
+#' \eqn{w_t = 1} and the \eqn{\hat h} of the Gaussian fit,
+#' \eqn{\ell_G} is the Gaussian log-likelihood of the seasonally adjusted
+#' series by prediction-error decomposition under observation variance
+#' \eqn{h_t} and slope variance \eqn{q \hat h}, with the first two
+#' prediction errors (the diffuse elements of the initial state) left out
+#' for every grid point, and the sum runs over the observed weeks
+#' (Gamma density with shape and rate \eqn{\nu/2}). To keep one IRLS per
+#' grid point, the seasonal component is estimated once by the backfitting
+#' at the Gaussian `q` and held fixed during the grid search; the full
+#' backfitting is then run at the selected point. With
+#' `damping = "profile"` (requires `q_select = "profile_t"`) the slope is
+#' damped, \eqn{\beta_{t+1} = \phi \beta_t + \eta_t},
+#' \eqn{\eta_t \sim N(0, q \hat h)}, level variance 0, with both states
+#' diffuse at the start for every \eqn{\phi}, and \eqn{(q, \phi)} is
+#' profiled jointly on `log10_q_grid` x `phi_grid`. `fits` reports
+#' `q_select`, the selected `q` (`value`), `phi`, `loglik_profile` (the
+#' objective at the selected point, with the seasonal of the grid search),
+#' `q_at_edge` (selected `q` at the minimum or maximum of the grid),
+#' `phi_at_edge` (selected \eqn{\phi < 1} at the minimum of `phi_grid`;
+#' \eqn{\phi = 1} is not an edge), and the IRLS `iterations` and
+#' `irls_converged` of the final fit. The grid search multiplies the cost
+#' of a `smooth_t` pass by about the number of grid points.
 #'
 #' **Bands.** With `band = "model"`, the Kalman methods (`level`, `llt`,
 #' `smooth`, `smooth_t`) use the auxiliary-residual band
@@ -1346,6 +1509,13 @@ whittaker_smooth <- function(
 #' Non-Kalman methods with `band = "model"`, and every method with
 #' `band = "mad"`, use `trend + seasonal +/- k * 1.4826 * MAD(remainder)`,
 #' the MAD computed on the weeks used in the fit of that pass.
+#'
+#' **Weights.** For `smooth_t`, `weight` holds the final Student-t weight
+#' \eqn{w_t} of the weeks used in the final fit and `flag_weight` is
+#' \eqn{w_t < (\nu + 1) / (\nu + z^2)}, i.e. \eqn{s_t > z}: the week is
+#' down-weighted as much as a standardised residual beyond the band
+#' multiplier `z`. Both are `NA` for other methods and for weeks not used
+#' in the final fit.
 #'
 #' **Passes.** Pass 1 smooths the series as observed and flags the observed
 #' weeks outside the band (`flag_1`). Pass 2 sets the flagged weeks to `NA`
@@ -1402,6 +1572,17 @@ whittaker_smooth <- function(
 #' @param level Confidence level of `trend_lo`, `trend_hi`.
 #' @param flag_na `"all"` (every flagged week is set to missing in the next
 #'   pass) or `"isolated"` (only the weeks of `isolated` runs).
+#' @param q_select Choice of `q` for `smooth_t`: `"gaussian"` (default; the
+#'   ML value of the Gaussian smooth trend model) or `"profile_t"` (maximum
+#'   of the profile objective under the Student-t model, see Details).
+#'   Other methods accept only the default.
+#' @param log10_q_grid Grid of \eqn{\log_{10} q} values searched when
+#'   `q_select = "profile_t"`.
+#' @param damping `"none"` (default, \eqn{\phi = 1}) or `"profile"`
+#'   (damped slope, \eqn{\phi} profiled jointly with `q` on `phi_grid`;
+#'   requires `q_select = "profile_t"`, method `smooth_t` only).
+#' @param phi_grid Grid of damping factors in (0, 1] searched when
+#'   `damping = "profile"`.
 #'
 #' @return A data.table ordered by key and time with columns `key_cols`,
 #'   `time_col` (IDate), `observed` (transformed scale, `NA` for missing
@@ -1409,12 +1590,15 @@ whittaker_smooth <- function(
 #'   `whittaker`), `trend_lo`, `trend_hi`, `remainder`
 #'   (`observed - seasonal - trend`), `trend_pass1`, `band_lo`, `band_hi`,
 #'   `excluded`, `flag_1`, `flag_2` (`NA` when pass 2 was not run), `flag`,
-#'   `flag_type` (`NA` for unflagged weeks), `pass` (final pass of the key)
-#'   and `method`. Attributes: `fits` (one row per key x pass with `pass`,
+#'   `flag_type` (`NA` for unflagged weeks), `pass` (final pass of the key),
+#'   `method`, `weight` (final Student-t weight, `smooth_t` only) and
+#'   `flag_weight` (`weight < (nu + 1) / (nu + z^2)`). Attributes: `fits` (one row per key x pass with `pass`,
 #'   `K`, `aicc_K`, `parameter`, `value`, `criterion`, `criterion_value`,
 #'   `edf`, `rho`, `ic_ratio`, `var_level`, `var_slope`, `var_obs`, `band`,
-#'   `band_defined`, `n_excluded`, `n_flag`, `iterations` (IRLS, `smooth_t`), `final`,
-#'   `converged`, `error`), `flags` (one row per run of `flag` with `start`,
+#'   `band_defined`, `n_excluded`, `n_flag`, `iterations` (IRLS, `smooth_t`),
+#'   `irls_converged`, `q_select`, `phi`, `loglik_profile`, `q_at_edge`,
+#'   `phi_at_edge` (`smooth_t`, see Details), `final`, `converged`,
+#'   `error`), `flags` (one row per run of `flag` with `start`,
 #'   `end`, `n_weeks`, `flag_type`, `shift`, `half_width`), `transform`,
 #'   `observed_transform`, `key_cols`, `time_col`, `period`, `method` and
 #'   `band`.
@@ -1462,7 +1646,11 @@ robust_smooth <- function(
   run_min = 4L,
   nu = 4,
   level = 0.95,
-  flag_na = c("all", "isolated")
+  flag_na = c("all", "isolated"),
+  q_select = c("gaussian", "profile_t"),
+  log10_q_grid = seq(-6, 1, by = 0.25),
+  damping = c("none", "profile"),
+  phi_grid = c(seq(0.80, 0.98, by = 0.02), 0.99, 1)
 ) {
   caller <- "robust_smooth"
 
@@ -1471,6 +1659,8 @@ robust_smooth <- function(
   transform <- match.arg(transform)
   band <- match.arg(band)
   flag_na <- match.arg(flag_na)
+  q_select <- match.arg(q_select)
+  damping <- match.arg(damping)
   .si_check_df(dt, "dt", caller)
   .ti_check_keys(key_cols, caller)
   .si_check_name(time_col, "time_col", caller)
@@ -1511,6 +1701,37 @@ robust_smooth <- function(
   if (method == "gam_ar1") {
     check_suggests("mgcv", "for method = 'gam_ar1'")
   }
+  if (method != "smooth_t" && (q_select != "gaussian" || damping != "none")) {
+    stop(
+      caller,
+      ": `q_select` and `damping` apply only to method = 'smooth_t'",
+      call. = FALSE
+    )
+  }
+  if (damping == "profile" && q_select != "profile_t") {
+    stop(
+      caller,
+      ": damping = 'profile' requires q_select = 'profile_t' ",
+      "((q, phi) are profiled jointly)",
+      call. = FALSE
+    )
+  }
+  if (
+    !is.numeric(log10_q_grid) ||
+      length(log10_q_grid) == 0L ||
+      anyNA(log10_q_grid) ||
+      any(!is.finite(log10_q_grid))
+  ) {
+    stop(caller, ": `log10_q_grid` must be finite numbers", call. = FALSE)
+  }
+  if (
+    !is.numeric(phi_grid) ||
+      length(phi_grid) == 0L ||
+      anyNA(phi_grid) ||
+      any(phi_grid <= 0 | phi_grid > 1)
+  ) {
+    stop(caller, ": `phi_grid` must contain values in (0, 1]", call. = FALSE)
+  }
   o <- list(
     period = period,
     harmonics = harmonics,
@@ -1525,7 +1746,11 @@ robust_smooth <- function(
     flag_na = flag_na,
     lengths = c(13L, 23L, 39L),
     spans = seq(0.06, 0.5, by = 0.02),
-    rhos = seq(0, 0.9, by = 0.05)
+    rhos = seq(0, 0.9, by = 0.05),
+    q_select = q_select,
+    log10_q_grid = sort(unique(as.numeric(log10_q_grid))),
+    damping = damping,
+    phi_grid = sort(unique(as.numeric(phi_grid)))
   )
 
   # 8.2 weekly grid and transform -----
@@ -1554,7 +1779,14 @@ robust_smooth <- function(
   d[, .gid := .GRP, by = key_cols]
   rng <- d[, list(.first = .I[1L], .last = .I[.N]), by = .gid]
   n_row <- nrow(d)
-  num_cols <- c("seasonal", "trend", "trend_se", "trend_pass1", ".half")
+  num_cols <- c(
+    "seasonal",
+    "trend",
+    "trend_se",
+    "trend_pass1",
+    ".half",
+    "weight"
+  )
   lgl_cols <- c("excluded", "flag_1", "flag_2", "flag")
   res <- c(
     stats::setNames(
@@ -1634,6 +1866,11 @@ robust_smooth <- function(
   data.table::set(d, j = "band_lo", value = d$seasonal + d$trend - d$.half)
   data.table::set(d, j = "band_hi", value = d$seasonal + d$trend + d$.half)
   data.table::set(d, j = "method", value = method)
+  data.table::set(
+    d,
+    j = "flag_weight",
+    value = d$weight < (nu + 1) / (nu + z^2)
+  )
   d[, c(".gid", ".half") := NULL]
   data.table::setnames(d, ".time", time_col)
   data.table::setcolorder(d, c(key_cols, time_col, .rs_out_cols))

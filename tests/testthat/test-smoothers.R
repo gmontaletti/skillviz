@@ -377,3 +377,278 @@ test_that("model band is undefined, not NaN, when the observation variance is 0"
   )
   expect_true(all(attr(rs2, "fits")$band_defined))
 })
+
+# 6. robust_smooth: smooth_t with q profile and damping -----
+
+test_that("defaults reproduce the output computed before q profile and damping", {
+  # reference values computed at commit 2d84a50 (before the new arguments)
+  d <- sim_rs(n = 130L, spikes = 40, trough = integer(0))
+  ref <- list(
+    smooth_t = list(
+      trend = c(7.019638916, 7.346602535, 7.035510792, 6.998417629),
+      band = 30.74028923,
+      value = c(5.047427919e-05, 0.0008444905177, 0.0009596145955),
+      n_flag = 2L
+    ),
+    smooth = list(
+      trend = c(7.018955208, 7.352060846, 7.040295125, 6.99498457),
+      band = 38.40078664,
+      value = 5.047427919e-05,
+      n_flag = 1L
+    ),
+    level = list(
+      trend = c(7.041480574, 7.360615707, 7.016459549, 6.988713929),
+      band = 32.07486047,
+      value = 0.0128734106,
+      n_flag = 1L
+    ),
+    whittaker = list(
+      trend = c(7.035196807, 7.349241377, 7.041860371, 6.986543109),
+      band = 39.15347232,
+      value = 25118.86432,
+      n_flag = 1L
+    )
+  )
+  for (m in names(ref)) {
+    rs <- robust_smooth(d, "source", "week", "n", method = m,
+      harmonics = 2L, n_backfit = 2L)
+    fits <- attr(rs, "fits")
+    expect_equal(rs$trend[c(1, 50, 100, 130)], ref[[m]]$trend,
+      tolerance = 1e-6, info = m)
+    expect_equal(sum(rs$band_hi - rs$band_lo), ref[[m]]$band,
+      tolerance = 1e-6, info = m)
+    expect_equal(fits$value[seq_along(ref[[m]]$value)], ref[[m]]$value,
+      tolerance = 1e-5, info = m)
+    expect_identical(sum(rs$flag), ref[[m]]$n_flag, info = m)
+  }
+})
+
+# reference copy of the undamped smoother before `phi` was added
+rs_kf_smooth_v0 <- function(x, h, var_slope) {
+  n <- length(x)
+  kap <- 1e4 * max(stats::var(x, na.rm = TRUE), .Machine$double.eps)
+  pp11 <- pp12 <- numeric(n)
+  af1 <- pf11 <- pf12 <- numeric(n)
+  vv <- ff <- rep(NA_real_, n)
+  a1 <- x[which(!is.na(x))[1L]]
+  a2 <- 0
+  p11 <- 4 * kap
+  p12 <- 2 * kap
+  p22 <- kap + var_slope
+  for (t in seq_len(n)) {
+    pp11[t] <- p11
+    pp12[t] <- p12
+    if (!is.na(x[t])) {
+      v <- x[t] - a1
+      f <- p11 + h[t]
+      vv[t] <- v
+      ff[t] <- f
+      a1 <- a1 + p11 / f * v
+      a2 <- a2 + p12 / f * v
+      n22 <- p22 - p12 * p12 / f
+      n12 <- p12 * h[t] / f
+      p11 <- p11 * h[t] / f
+      p12 <- n12
+      p22 <- n22
+    }
+    af1[t] <- a1
+    pf11[t] <- p11
+    pf12[t] <- p12
+    a1 <- a1 + a2
+    q11 <- p11 + 2 * p12 + p22
+    q12 <- p12 + p22
+    p11 <- q11
+    p12 <- q12
+    p22 <- p22 + var_slope
+  }
+  r1 <- r2 <- 0
+  n11 <- n12 <- n22 <- 0
+  lev <- vlev <- numeric(n)
+  for (t in rev(seq_len(n))) {
+    c1 <- pf11[t] + pf12[t]
+    c2 <- pf12[t]
+    lev[t] <- af1[t] + c1 * r1 + c2 * r2
+    vlev[t] <- pf11[t] - (c1^2 * n11 + 2 * c1 * c2 * n12 + c2^2 * n22)
+    if (!is.na(vv[t])) {
+      f <- ff[t]
+      l11 <- 1 - (pp11[t] + pp12[t]) / f
+      l21 <- -pp12[t] / f
+      nr1 <- vv[t] / f + l11 * r1 + l21 * r2
+      nr2 <- r1 + r2
+      a11 <- l11 * n11 + l21 * n12
+      a12 <- l11 * n12 + l21 * n22
+      m11 <- a11 * l11 + a12 * l21 + 1 / f
+      m12 <- a11 + a12
+      m22 <- n11 + n12 + n12 + n22
+    } else {
+      nr1 <- r1
+      nr2 <- r1 + r2
+      m11 <- n11
+      m12 <- n11 + n12
+      m22 <- n11 + 2 * n12 + n22
+    }
+    r1 <- nr1
+    r2 <- nr2
+    n11 <- m11
+    n12 <- m12
+    n22 <- m22
+  }
+  list(level = lev, var_level = pmax(vlev, 0))
+}
+
+test_that("the damped smoother equals the old one at phi = 1 and KalmanSmooth", {
+  set.seed(4)
+  x <- 5 + cumsum(cumsum(stats::rnorm(150, 0, 0.002))) +
+    stats::rnorm(150, 0, 0.05)
+  x[c(20, 60:65)] <- NA
+  h <- 0.05^2 * stats::runif(150, 0.5, 2)
+  old <- rs_kf_smooth_v0(x, h, 1e-5)
+  new <- skillviz:::.rs_kf_smooth(x, h, 1e-5, phi = 1)
+  expect_equal(new$level, old$level, tolerance = 1e-10)
+  expect_equal(new$var_level, old$var_level, tolerance = 1e-10)
+  expect_identical(
+    skillviz:::.rs_kf_smooth(x, h, 1e-5)$level,
+    new$level
+  )
+  # damped slope: same model and initial state in stats::KalmanSmooth()
+  kap <- 1e4 * stats::var(x, na.rm = TRUE)
+  for (phi in c(0.9, 0.5)) {
+    mod <- list(
+      T = matrix(c(1, 0, 1, phi), 2L), Z = c(1, 0), h = 0.0025,
+      V = diag(c(0, 1e-5)), a = c(x[1L], 0), P = matrix(kap, 2L, 2L),
+      Pn = matrix(0, 2L, 2L)
+    )
+    sm <- stats::KalmanSmooth(x, mod, nit = -1L)
+    k <- skillviz:::.rs_kf_smooth(x, rep(0.0025, 150), 1e-5, phi = phi)
+    expect_equal(k$level, sm$smooth[, 1L], tolerance = 1e-8, info = phi)
+    # concentrated variance of KalmanRun() from the prediction errors
+    kr <- stats::KalmanRun(x, mod, nit = -1L)
+    i <- which(!is.na(k$v))
+    expect_equal(mean(k$v[i]^2 / k$F[i]), unname(kr$values[2L]),
+      tolerance = 1e-8, info = phi)
+  }
+})
+
+# Smooth trend (optionally damped slope) + 3 harmonics + scaled t(4) noise
+# of variance h; the t-model scale is h * (nu - 2) / nu, so the q of the
+# t model is q * nu / (nu - 2).
+sim_t <- function(n = 191L, q = 1e-3, h = 0.01, phi = 1, seed = 1L,
+                  nu = 4, trough = NULL) {
+  set.seed(seed)
+  weeks <- data.table::as.IDate("2023-01-02") + 7L * (0:(n - 1L))
+  tw <- as.numeric(weeks) / 7
+  sl <- lev <- numeric(n)
+  sl[1L] <- 0.01
+  lev[1L] <- 5
+  for (t in 2:n) {
+    sl[t] <- phi * sl[t - 1L] + stats::rnorm(1L, 0, sqrt(q * h))
+    lev[t] <- lev[t - 1L] + sl[t - 1L]
+  }
+  X <- skillviz:::.ti_fourier(tw, 3L, rs_period)
+  y <- lev + drop(X %*% stats::rnorm(ncol(X), 0, 0.08)) +
+    sqrt(h) * stats::rt(n, nu) * sqrt((nu - 2) / nu)
+  if (!is.null(trough)) {
+    y[trough] <- y[trough] - 1.5
+  }
+  data.table::data.table(source = "s", week = weeks, n = y, lev = lev)
+}
+
+rs_t <- function(d, ...) {
+  robust_smooth(d, "source", "week", "n", method = "smooth_t",
+    transform = "none", harmonics = 3L, max_iter = 0L, ...)
+}
+
+test_that("profile_t recovers q and is less affected by a trough", {
+  d <- sim_t(seed = 1L)
+  g <- attr(rs_t(d), "fits")
+  p <- attr(rs_t(d, q_select = "profile_t"), "fits")
+  expect_identical(g$q_select, "gaussian")
+  expect_identical(p$q_select, "profile_t")
+  expect_identical(p$phi, 1)
+  expect_true(is.na(g$loglik_profile))
+  expect_true(is.finite(p$loglik_profile))
+  expect_false(p$q_at_edge)
+  expect_true(is.na(p$phi_at_edge))
+  # true q of the t model: 1e-3 * 4 / 2
+  expect_lt(abs(log10(p$value) - log10(2e-3)), 0.3)
+  expect_true(p$irls_converged)
+  dt <- sim_t(seed = 1L, trough = 100:105)
+  g2 <- attr(rs_t(dt), "fits")
+  p2 <- attr(rs_t(dt, q_select = "profile_t"), "fits")
+  expect_lt(
+    abs(log10(p2$value / p$value)),
+    abs(log10(g2$value / g$value))
+  )
+})
+
+test_that("damping profile finds phi < 1 on a damped series, ~1 otherwise", {
+  dd <- sim_t(seed = 2L, phi = 0.9, q = 1e-2)
+  f <- attr(rs_t(dd, q_select = "profile_t", damping = "profile"), "fits")
+  expect_lt(f$phi, 0.97)
+  expect_false(f$phi_at_edge)
+  du <- sim_t(seed = 4L)
+  fu <- attr(rs_t(du, q_select = "profile_t", damping = "profile"), "fits")
+  expect_gte(fu$phi, 0.96)
+})
+
+test_that("edge flags of the profile grid", {
+  dd <- sim_t(seed = 2L, phi = 0.9, q = 1e-2)
+  f <- attr(rs_t(dd, q_select = "profile_t", damping = "profile",
+    log10_q_grid = seq(-6, -5, by = 0.5), phi_grid = c(0.98, 0.99, 1)),
+    "fits")
+  expect_equal(f$value, 1e-5, tolerance = 1e-12)
+  expect_true(f$q_at_edge)
+  expect_equal(f$phi, 0.98, tolerance = 1e-12)
+  expect_true(f$phi_at_edge)
+})
+
+test_that("weight and flag_weight columns", {
+  d <- sim_rs(n = 130L, spikes = 40, trough = integer(0))
+  rs <- robust_smooth(d, "source", "week", "n", method = "smooth_t",
+    harmonics = 2L, max_iter = 0L)
+  expect_true(all(rs$weight > 0 & rs$weight <= 5 / 4))
+  expect_identical(rs$flag_weight, rs$weight < 5 / (4 + 3.5^2))
+  expect_true(rs$flag_weight[40])
+  expect_lt(rs$weight[40], 0.1)
+  # weeks not used in the fit have no weight
+  r2 <- robust_smooth(d, "source", "week", "n", method = "smooth_t",
+    harmonics = 2L)
+  expect_true(is.na(r2$weight[40]) && isTRUE(r2$excluded[40]))
+  rw <- robust_smooth(d, "source", "week", "n", method = "whittaker",
+    harmonics = 2L)
+  expect_true(all(is.na(rw$weight) & is.na(rw$flag_weight)))
+  expect_true(all(is.na(attr(rw, "fits")$q_select)))
+})
+
+test_that("q_select and damping reject invalid combinations", {
+  d <- sim_rs(n = 60L, spikes = integer(0), trough = integer(0))
+  expect_error(
+    robust_smooth(d, "source", "week", "n", method = "smooth",
+      q_select = "profile_t"),
+    "only to method = 'smooth_t'"
+  )
+  expect_error(
+    robust_smooth(d, "source", "week", "n", method = "llt",
+      damping = "profile"),
+    "only to method = 'smooth_t'"
+  )
+  expect_error(
+    robust_smooth(d, "source", "week", "n", method = "smooth_t",
+      damping = "profile"),
+    "requires q_select = 'profile_t'"
+  )
+  expect_error(
+    robust_smooth(d, "source", "week", "n", method = "smooth_t",
+      q_select = "profile_t", phi_grid = c(0.9, 1.1)),
+    "phi_grid"
+  )
+  expect_error(
+    robust_smooth(d, "source", "week", "n", method = "smooth_t",
+      q_select = "profile_t", log10_q_grid = c(-3, NA)),
+    "log10_q_grid"
+  )
+  expect_error(
+    robust_smooth(d, "source", "week", "n", q_select = "x"),
+    "should be one of"
+  )
+})

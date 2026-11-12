@@ -23,7 +23,11 @@ robust_smooth(
   run_min = 4L,
   nu = 4,
   level = 0.95,
-  flag_na = c("all", "isolated")
+  flag_na = c("all", "isolated"),
+  q_select = c("gaussian", "profile_t"),
+  log10_q_grid = seq(-6, 1, by = 0.25),
+  damping = c("none", "profile"),
+  phi_grid = c(seq(0.8, 0.98, by = 0.02), 0.99, 1)
 )
 }
 \arguments{
@@ -73,6 +77,21 @@ deviations, \code{1.4826 * MAD}).}
 
 \item{flag_na}{\code{"all"} (every flagged week is set to missing in the next
 pass) or \code{"isolated"} (only the weeks of \code{isolated} runs).}
+
+\item{q_select}{Choice of \code{q} for \code{smooth_t}: \code{"gaussian"} (default; the
+ML value of the Gaussian smooth trend model) or \code{"profile_t"} (maximum
+of the profile objective under the Student-t model, see Details).
+Other methods accept only the default.}
+
+\item{log10_q_grid}{Grid of \eqn{\log_{10} q} values searched when
+\code{q_select = "profile_t"}.}
+
+\item{damping}{\code{"none"} (default, \eqn{\phi = 1}) or \code{"profile"}
+(damped slope, \eqn{\phi} profiled jointly with \code{q} on \code{phi_grid};
+requires \code{q_select = "profile_t"}, method \code{smooth_t} only).}
+
+\item{phi_grid}{Grid of damping factors in (0, 1] searched when
+\code{damping = "profile"}.}
 }
 \value{
 A data.table ordered by key and time with columns \code{key_cols},
@@ -81,12 +100,15 @@ weeks), \code{seasonal}, \code{trend}, \code{trend_se} (\code{NA} for \code{hend
 \code{whittaker}), \code{trend_lo}, \code{trend_hi}, \code{remainder}
 (\code{observed - seasonal - trend}), \code{trend_pass1}, \code{band_lo}, \code{band_hi},
 \code{excluded}, \code{flag_1}, \code{flag_2} (\code{NA} when pass 2 was not run), \code{flag},
-\code{flag_type} (\code{NA} for unflagged weeks), \code{pass} (final pass of the key)
-and \code{method}. Attributes: \code{fits} (one row per key x pass with \code{pass},
+\code{flag_type} (\code{NA} for unflagged weeks), \code{pass} (final pass of the key),
+\code{method}, \code{weight} (final Student-t weight, \code{smooth_t} only) and
+\code{flag_weight} (\code{weight < (nu + 1) / (nu + z^2)}). Attributes: \code{fits} (one row per key x pass with \code{pass},
 \code{K}, \code{aicc_K}, \code{parameter}, \code{value}, \code{criterion}, \code{criterion_value},
 \code{edf}, \code{rho}, \code{ic_ratio}, \code{var_level}, \code{var_slope}, \code{var_obs}, \code{band},
-\code{band_defined}, \code{n_excluded}, \code{n_flag}, \code{iterations} (IRLS, \code{smooth_t}), \code{final},
-\code{converged}, \code{error}), \code{flags} (one row per run of \code{flag} with \code{start},
+\code{band_defined}, \code{n_excluded}, \code{n_flag}, \code{iterations} (IRLS, \code{smooth_t}),
+\code{irls_converged}, \code{q_select}, \code{phi}, \code{loglik_profile}, \code{q_at_edge},
+\code{phi_at_edge} (\code{smooth_t}, see Details), \code{final}, \code{converged},
+\code{error}), \code{flags} (one row per run of \code{flag} with \code{start},
 \code{end}, \code{n_weeks}, \code{flag_type}, \code{shift}, \code{half_width}), \code{transform},
 \code{observed_transform}, \code{key_cols}, \code{time_col}, \code{period}, \code{method} and
 \code{band}.
@@ -148,10 +170,41 @@ Student-t weights \eqn{w_t = (\nu + 1) / (\nu + s_t^2)},
 \eqn{s_t^2 = (e_t^2 + P_{t|n}) / \hat h} (EM weights; \eqn{e_t} the
 auxiliary residual, \eqn{P_{t|n}} the smoothed level variance), and
 \eqn{\hat h} re-estimated as the weighted mean of
-\eqn{e_t^2 + P_{t|n}}. \code{q} is kept fixed, so the smoothness of the ML
-fit is kept and only the weights change. The seasonal coefficients are
-re-estimated by weighted least squares in the backfitting.
+\eqn{e_t^2 + P_{t|n}}. With \code{q_select = "gaussian"} (default) \code{q} is
+kept fixed, so the smoothness of the ML fit is kept and only the
+weights change. The seasonal coefficients are re-estimated by weighted
+least squares in the backfitting. The final weights are returned in
+\code{weight}.
 }
+
+\strong{\code{smooth_t}: q under the t model and damped slope.} With
+\code{q_select = "profile_t"}, \code{q} is chosen on the grid
+\eqn{10^g}, \code{g} in \code{log10_q_grid}, by maximising
+\deqn{L(q, \phi) = \ell_G(q, \phi; h_t = \hat h / w_t) +
+  \sum_t \log \mathrm{Gamma}(w_t; \nu/2, \nu/2),}
+where, for each grid point, the IRLS is run to convergence from
+\eqn{w_t = 1} and the \eqn{\hat h} of the Gaussian fit,
+\eqn{\ell_G} is the Gaussian log-likelihood of the seasonally adjusted
+series by prediction-error decomposition under observation variance
+\eqn{h_t} and slope variance \eqn{q \hat h}, with the first two
+prediction errors (the diffuse elements of the initial state) left out
+for every grid point, and the sum runs over the observed weeks
+(Gamma density with shape and rate \eqn{\nu/2}). To keep one IRLS per
+grid point, the seasonal component is estimated once by the backfitting
+at the Gaussian \code{q} and held fixed during the grid search; the full
+backfitting is then run at the selected point. With
+\code{damping = "profile"} (requires \code{q_select = "profile_t"}) the slope is
+damped, \eqn{\beta_{t+1} = \phi \beta_t + \eta_t},
+\eqn{\eta_t \sim N(0, q \hat h)}, level variance 0, with both states
+diffuse at the start for every \eqn{\phi}, and \eqn{(q, \phi)} is
+profiled jointly on \code{log10_q_grid} x \code{phi_grid}. \code{fits} reports
+\code{q_select}, the selected \code{q} (\code{value}), \code{phi}, \code{loglik_profile} (the
+objective at the selected point, with the seasonal of the grid search),
+\code{q_at_edge} (selected \code{q} at the minimum or maximum of the grid),
+\code{phi_at_edge} (selected \eqn{\phi < 1} at the minimum of \code{phi_grid};
+\eqn{\phi = 1} is not an edge), and the IRLS \code{iterations} and
+\code{irls_converged} of the final fit. The grid search multiplies the cost
+of a \code{smooth_t} pass by about the number of grid points.
 
 \strong{Bands.} With \code{band = "model"}, the Kalman methods (\code{level}, \code{llt},
 \code{smooth}, \code{smooth_t}) use the auxiliary-residual band
@@ -175,6 +228,13 @@ band is undefined: \code{band_lo}, \code{band_hi} and the flags of the key are
 Non-Kalman methods with \code{band = "model"}, and every method with
 \code{band = "mad"}, use \verb{trend + seasonal +/- k * 1.4826 * MAD(remainder)},
 the MAD computed on the weeks used in the fit of that pass.
+
+\strong{Weights.} For \code{smooth_t}, \code{weight} holds the final Student-t weight
+\eqn{w_t} of the weeks used in the final fit and \code{flag_weight} is
+\eqn{w_t < (\nu + 1) / (\nu + z^2)}, i.e. \eqn{s_t > z}: the week is
+down-weighted as much as a standardised residual beyond the band
+multiplier \code{z}. Both are \code{NA} for other methods and for weeks not used
+in the final fit.
 
 \strong{Passes.} Pass 1 smooths the series as observed and flags the observed
 weeks outside the band (\code{flag_1}). Pass 2 sets the flagged weeks to \code{NA}
