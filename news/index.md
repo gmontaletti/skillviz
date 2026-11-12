@@ -1,5 +1,127 @@
 # Changelog
 
+## skillviz 0.8.0
+
+### Stock di annunci aperti
+
+- Nuove funzioni per lo stock giornaliero degli annunci aperti:
+  - [`events_from_intervals()`](https://gmontaletti.github.io/skillviz/reference/events_from_intervals.md)
+    converte gli intervalli di pubblicazione in una tabella di eventi
+    (ingressi e uscite);
+  - [`stock_from_events()`](https://gmontaletti.github.io/skillviz/reference/stock_from_events.md)
+    calcola lo stock giornaliero di annunci aperti come somma
+    progressiva degli ingressi meno le uscite;
+  - [`duration_survival()`](https://gmontaletti.github.io/skillviz/reference/duration_survival.md)
+    restituisce la funzione di sopravvivenza delle durate degli annunci
+    per gruppo;
+  - [`standardized_stock()`](https://gmontaletti.github.io/skillviz/reference/standardized_stock.md)
+    calcola lo stock che il flusso osservato genererebbe con una durata
+    standardizzata;
+  - [`to_weekly()`](https://gmontaletti.github.io/skillviz/reference/to_weekly.md)
+    aggrega le serie giornaliere a settimane di calendario.
+
+### Stima del trend e indici
+
+- Nuove funzioni per il trend di serie settimanali per fonte e per gli
+  indici composti:
+  - [`extract_trend()`](https://gmontaletti.github.io/skillviz/reference/extract_trend.md)
+    stima il trend con i metodi `"llt"` (default), `"smooth"` (trend
+    locale lineare con varianza del livello nulla), `"ets"` e `"stl"`,
+    con stagionalità di Fourier; i casi di massima verosimiglianza al
+    bordo dello spazio dei parametri sono segnalati come `boundary`,
+    distinti dai tentativi falliti segnalati come `degenerate`;
+  - [`trend_diagnostics()`](https://gmontaletti.github.io/skillviz/reference/trend_diagnostics.md)
+    riassume, per chiave, la quota del movimento della serie
+    destagionalizzata spiegata dal trend;
+  - [`trend_revisions()`](https://gmontaletti.github.io/skillviz/reference/trend_revisions.md)
+    misura le revisioni del trend quando arrivano nuovi dati,
+    rieseguendo
+    [`extract_trend()`](https://gmontaletti.github.io/skillviz/reference/extract_trend.md)
+    su dati troncati;
+  - [`trend_index()`](https://gmontaletti.github.io/skillviz/reference/trend_index.md)
+    trasforma il trend in un indice in base fissa;
+  - [`aggregate_index()`](https://gmontaletti.github.io/skillviz/reference/aggregate_index.md)
+    aggrega gli indici di fonte con pesi fissi, geometrici o aritmetici;
+  - [`index_jackknife()`](https://gmontaletti.github.io/skillviz/reference/index_jackknife.md)
+    restituisce l’intervallo dell’indice aggregato escludendo una fonte
+    per volta;
+  - [`trend_concordance()`](https://gmontaletti.github.io/skillviz/reference/trend_concordance.md)
+    misura quanto le fonti si muovono nella stessa direzione;
+  - [`compose_skill_index()`](https://gmontaletti.github.io/skillviz/reference/compose_skill_index.md)
+    costruisce l’indice di una competenza come prodotto dell’indice di
+    stock totale e della quota della competenza.
+
+### Lisciamento
+
+- Nuove funzioni di lisciamento, in `R/smoothers.R`:
+  - [`henderson_weights()`](https://gmontaletti.github.io/skillviz/reference/henderson_weights.md)
+    e
+    [`henderson_filter()`](https://gmontaletti.github.io/skillviz/reference/henderson_filter.md)
+    implementano il filtro di Henderson con pesi di Musgrave alle
+    estremità; la lunghezza è scelta per GCV fra i valori candidati,
+    oppure fissata dall’utente;
+  - [`whittaker_smooth()`](https://gmontaletti.github.io/skillviz/reference/whittaker_smooth.md)
+    implementa il lisciamento di Whittaker-Henderson con parametro di
+    lisciamento scelto per GCV;
+  - [`robust_smooth()`](https://gmontaletti.github.io/skillviz/reference/robust_smooth.md)
+    lisci una serie in passate successive, individuando gli outlier con
+    la regola MAD o con pesi t di Student; restituisce bande attorno ai
+    valori lisciati e colonne `weight` e `flag_weight`. Il metodo
+    `"smooth_t"` usa un filtro di Kalman robusto, con `q` scelto per
+    profilo della verosimiglianza (`q_select = "profile_t"`) e,
+    opzionalmente, uno smorzamento della pendenza
+    (`damping = "profile"`);
+  - con varianza delle osservazioni nulla, la banda del modello è ora
+    `NA` (banda indefinita) invece di `NaN`.
+- `mgcv` è aggiunto a `Suggests`.
+
+### Intervalli delle quote
+
+- Nuove funzioni per l’intervallo della quota di un codice quando gli
+  annunci sono raggruppati per fonte e le fonti sono trattate come un
+  campione di siti:
+  - [`share_interval()`](https://gmontaletti.github.io/skillviz/reference/share_interval.md)
+    calcola gli intervalli di Wilson, Jeffreys e logit con la numerosità
+    efficace `n / deff` e il quantile t con i gradi di libertà indicati;
+  - [`cluster_deff()`](https://gmontaletti.github.io/skillviz/reference/cluster_deff.md)
+    stima la varianza linearizzata dello stimatore di rapporto con le
+    fonti come cluster, l’effetto di disegno, la correlazione
+    intra-fonte, il numero efficace di fonti e i gradi di libertà; con
+    `cluster_totals` entrano nella varianza anche le fonti in cui il
+    codice non compare;
+  - [`smooth_deff()`](https://gmontaletti.github.io/skillviz/reference/smooth_deff.md)
+    stabilizza l’effetto di disegno dei codici piccoli con una funzione
+    di varianza per livello e con una contrazione di `log(deff)` verso
+    il nodo genitore;
+  - [`fit_betabinom()`](https://gmontaletti.github.io/skillviz/reference/fit_betabinom.md)
+    stima per massima verosimiglianza media e concentrazione di una
+    beta-binomiale;
+  - [`eb_share_tree()`](https://gmontaletti.github.io/skillviz/reference/eb_share_tree.md)
+    dà stime contratte (empirical Bayes) e intervalli credibili delle
+    quote su una gerarchia di codici: Dirichlet-multinomiale per le
+    partizioni (le quote dei figli sommano a quella del genitore),
+    beta-binomiale per i gruppi sovrapposti, con controllo di coerenza;
+  - [`cluster_boot_share()`](https://gmontaletti.github.io/skillviz/reference/cluster_boot_share.md)
+    calcola intervalli percentili e errori standard con il bootstrap
+    delle fonti;
+  - [`tree_fdr()`](https://gmontaletti.github.io/skillviz/reference/tree_fdr.md)
+    applica la procedura gerarchica di Yekutieli (2008):
+    Benjamini-Hochberg entro ogni famiglia di fratelli, discesa nei
+    figli solo dei nodi rigettati;
+  - [`finest_reliable_level()`](https://gmontaletti.github.io/skillviz/reference/finest_reliable_level.md)
+    restituisce per ogni codice il nodo più fine, fra il codice e i suoi
+    antenati, con ampiezza relativa dell’intervallo entro la soglia.
+
+### Composizione delle fonti
+
+- [`decompose_share_change()`](https://gmontaletti.github.io/skillviz/reference/decompose_share_change.md)
+  scompone la variazione di una quota fra due periodi, o due finestre,
+  nelle componenti entro fonte, fra fonti, ingressi e uscite (Melitz e
+  Polanec, 2015); le componenti sommano alla variazione osservata.
+- [`fixed_weight_share()`](https://gmontaletti.github.io/skillviz/reference/fixed_weight_share.md)
+  calcola la serie delle quote a pesi di fonte fissi, rinormalizzati
+  sulle fonti presenti in ogni periodo, accanto alla quota osservata.
+
 ## skillviz 0.6.1
 
 ### Pesi della pendenza delle quote

@@ -190,6 +190,81 @@ with prediction intervals.
 - [`forecast_share()`](https://gmontaletti.github.io/skillviz/reference/forecast_share.md)
   : Forecast skill shares with prediction intervals
 
+## Share Intervals
+
+Design effects with sources as clusters, intervals for shares, empirical
+Bayes shares on code hierarchies, cluster bootstrap and hierarchical
+FDR.
+
+- [`share_interval()`](https://gmontaletti.github.io/skillviz/reference/share_interval.md)
+  : Confidence interval for a share with a design effect
+- [`cluster_deff()`](https://gmontaletti.github.io/skillviz/reference/cluster_deff.md)
+  : Design effect of a share with sources as clusters
+- [`smooth_deff()`](https://gmontaletti.github.io/skillviz/reference/smooth_deff.md)
+  : Smooth design effects along a code hierarchy
+- [`fit_betabinom()`](https://gmontaletti.github.io/skillviz/reference/fit_betabinom.md)
+  : Maximum likelihood fit of a beta-binomial distribution
+- [`eb_share_tree()`](https://gmontaletti.github.io/skillviz/reference/eb_share_tree.md)
+  : Empirical Bayes shares on a code hierarchy
+- [`cluster_boot_share()`](https://gmontaletti.github.io/skillviz/reference/cluster_boot_share.md)
+  : Cluster bootstrap interval for shares
+- [`tree_fdr()`](https://gmontaletti.github.io/skillviz/reference/tree_fdr.md)
+  : Hierarchical false discovery rate control on a tree
+- [`finest_reliable_level()`](https://gmontaletti.github.io/skillviz/reference/finest_reliable_level.md)
+  : Finest reliable level of a code hierarchy
+
+## Source Composition
+
+Decomposition of share changes into within-source and composition
+components, fixed-weight share series.
+
+- [`decompose_share_change()`](https://gmontaletti.github.io/skillviz/reference/decompose_share_change.md)
+  : Decompose the change of a share into within-source and composition
+- [`fixed_weight_share()`](https://gmontaletti.github.io/skillviz/reference/fixed_weight_share.md)
+  : Share series at fixed source weights
+
+## Stock and Trend Indices
+
+Daily stock of open postings from dated events, duration survival,
+standardised-duration stock, weekly aggregation, trend extraction,
+Henderson and Whittaker smoothers, robust smoothing with post-smoothing
+bands and index numbers aggregated over sources.
+
+- [`events_from_intervals()`](https://gmontaletti.github.io/skillviz/reference/events_from_intervals.md)
+  : Event table from posting intervals
+- [`stock_from_events()`](https://gmontaletti.github.io/skillviz/reference/stock_from_events.md)
+  : Daily stock of open postings from dated events
+- [`duration_survival()`](https://gmontaletti.github.io/skillviz/reference/duration_survival.md)
+  : Survival function of posting durations
+- [`standardized_stock()`](https://gmontaletti.github.io/skillviz/reference/standardized_stock.md)
+  : Standardised-duration stock
+- [`to_weekly()`](https://gmontaletti.github.io/skillviz/reference/to_weekly.md)
+  : Aggregate a daily series to weeks
+- [`extract_trend()`](https://gmontaletti.github.io/skillviz/reference/extract_trend.md)
+  : Trend extraction with Fourier seasonality for weekly series
+- [`trend_diagnostics()`](https://gmontaletti.github.io/skillviz/reference/trend_diagnostics.md)
+  : Diagnostics of extracted trends
+- [`trend_revisions()`](https://gmontaletti.github.io/skillviz/reference/trend_revisions.md)
+  : Revisions of the trend as new data arrive
+- [`trend_index()`](https://gmontaletti.github.io/skillviz/reference/trend_index.md)
+  : Index numbers from extracted trends
+- [`aggregate_index()`](https://gmontaletti.github.io/skillviz/reference/aggregate_index.md)
+  : Weighted aggregation of source indices
+- [`compose_skill_index()`](https://gmontaletti.github.io/skillviz/reference/compose_skill_index.md)
+  : Skill index from total and share trends
+- [`index_jackknife()`](https://gmontaletti.github.io/skillviz/reference/index_jackknife.md)
+  : Leave-one-source-out range of an aggregated index
+- [`trend_concordance()`](https://gmontaletti.github.io/skillviz/reference/trend_concordance.md)
+  : Concordance of trends across sources
+- [`henderson_weights()`](https://gmontaletti.github.io/skillviz/reference/henderson_weights.md)
+  : Symmetric Henderson weights
+- [`henderson_filter()`](https://gmontaletti.github.io/skillviz/reference/henderson_filter.md)
+  : Henderson trend filter with Musgrave end weights
+- [`whittaker_smooth()`](https://gmontaletti.github.io/skillviz/reference/whittaker_smooth.md)
+  : Whittaker-Henderson smoother with GCV
+- [`robust_smooth()`](https://gmontaletti.github.io/skillviz/reference/robust_smooth.md)
+  : Robust trend smoothing with post-smoothing bands and re-smoothing
+
 ## Skill Extraction
 
 Extract profession-specific skills and build skill profiles.
