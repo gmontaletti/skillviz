@@ -11,7 +11,7 @@ still has autocorrelation or exceeds the sampling-noise floor."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.8.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.8.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -110,37 +110,37 @@ ratio near 1 means the remainder is close to pure sampling noise.</p></li>
 <span class="r-in"><span><span class="va">tr</span><span class="op">[</span><span class="va">d</span>, <span class="va">n</span> <span class="op">:=</span> <span class="va">i.n</span>, on <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"source"</span>, <span class="st">"week"</span><span class="op">)</span><span class="op">]</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      source       week observed      seasonal    trend trend_filtered</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      &lt;char&gt;     &lt;IDat&gt;    &lt;num&gt;         &lt;num&gt;    &lt;num&gt;          &lt;num&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   1:      a 2023-05-01 4.948760 -0.0009099934 4.959591       4.949670</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   2:      a 2023-05-08 5.105945 -0.0006638726 4.964541       5.058320</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   3:      a 2023-05-15 5.105945 -0.0004081371 4.969475       5.101057</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   4:      a 2023-05-22 5.043425 -0.0001464907 4.974388       5.094767</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   5:      a 2023-05-29 4.875197  0.0001172773 4.979279       5.024298</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   1:      a 2023-05-01 4.948760 -0.0009100685 4.959591       4.949670</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   2:      a 2023-05-08 5.105945 -0.0006639365 4.964541       5.056570</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   3:      a 2023-05-15 5.105945 -0.0004081890 4.969474       5.099954</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   4:      a 2023-05-22 5.043425 -0.0001465298 4.974388       5.094198</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   5:      a 2023-05-29 4.875197  0.0001172516 4.979278       5.024122</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  ---                                                                 </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 152:      a 2026-03-23 5.446737 -0.0019481065 5.457618       5.449930</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 153:      a 2026-03-30 5.549076 -0.0018133345 5.460930       5.460289</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 154:      a 2026-04-06 5.407172 -0.0016523005 5.464243       5.459452</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 155:      a 2026-04-13 5.533389 -0.0014673366 5.467556       5.468007</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 156:      a 2026-04-20 5.463832 -0.0012611217 5.470869       5.470869</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 152:      a 2026-03-23 5.446737 -0.0019482201 5.457618       5.449930</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 153:      a 2026-03-30 5.549076 -0.0018134445 5.460930       5.460289</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 154:      a 2026-04-06 5.407172 -0.0016524053 5.464243       5.459452</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 155:      a 2026-04-13 5.533389 -0.0014674348 5.467556       5.468007</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 156:      a 2026-04-20 5.463832 -0.0012612118 5.470869       5.470869</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>         trend_se trend_lo trend_hi    remainder imputed method     n</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>            &lt;num&gt;    &lt;num&gt;    &lt;num&gt;        &lt;num&gt;  &lt;lgcl&gt; &lt;char&gt; &lt;int&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   1: 0.001281968 4.957079 4.962104 -0.009921267   FALSE    llt   141</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   2: 0.002070901 4.960482 4.968600  0.142068271   FALSE    llt   165</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   3: 0.002690698 4.964201 4.974749  0.136878767   FALSE    llt   165</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   4: 0.003274083 4.967971 4.980805  0.069183270   FALSE    llt   155</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   5: 0.003822578 4.971787 4.986771 -0.104198665   FALSE    llt   131</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   1: 0.001412207 4.956823 4.962359 -0.009921033   FALSE    llt   141</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   2: 0.002070876 4.960482 4.968600  0.142068602   FALSE    llt   165</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   3: 0.002690666 4.964201 4.974748  0.136879184   FALSE    llt   165</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   4: 0.003274045 4.967971 4.980805  0.069183766   FALSE    llt   155</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   5: 0.003822534 4.971786 4.986770 -0.104198100   FALSE    llt   131</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  ---                                                                </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 152: 0.016103433 5.426056 5.489180 -0.008932720   FALSE    llt   232</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 153: 0.016727685 5.428144 5.493716  0.089959323   FALSE    llt   257</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 154: 0.017384377 5.430170 5.498315 -0.055418501   FALSE    llt   223</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 155: 0.018072783 5.432134 5.502978  0.067301257   FALSE    llt   253</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 156: 0.018792033 5.434037 5.507700 -0.005775584   FALSE    llt   236</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 152: 0.016103429 5.426056 5.489180 -0.008932646   FALSE    llt   232</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 153: 0.016727681 5.428144 5.493716  0.089959392   FALSE    llt   257</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 154: 0.017384372 5.430170 5.498315 -0.055418437   FALSE    llt   223</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 155: 0.018072777 5.432134 5.502978  0.067301312   FALSE    llt   253</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 156: 0.018792026 5.434037 5.507700 -0.005775538   FALSE    llt   236</span>
 <span class="r-in"><span><span class="fu">trend_diagnostics</span><span class="op">(</span><span class="va">tr</span>, <span class="st">"source"</span>, n_col <span class="op">=</span> <span class="st">"n"</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    source method n_obs ratio_trend_remainder var_removed_d1 var_removed_d13</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    &lt;char&gt; &lt;char&gt; &lt;int&gt;                 &lt;num&gt;          &lt;num&gt;           &lt;num&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1:      a    llt   156           5.58867e-05   0.0001396054     0.002246451</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:      a    llt   156          5.588495e-05   0.0001395971     0.002246588</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    lb_p_value    roughness remainder_var noise_floor ratio_floor</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>         &lt;num&gt;        &lt;num&gt;         &lt;num&gt;       &lt;num&gt;       &lt;num&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1:  0.3227179 5.524993e-10    0.00461222 0.005248284   0.8788053</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:  0.3227209 5.524652e-10   0.004612223 0.005248284   0.8788058</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

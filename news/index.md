@@ -1,5 +1,21 @@
 # Changelog
 
+## skillviz 0.8.1
+
+### Correzioni
+
+- [`extract_trend()`](https://gmontaletti.github.io/skillviz/reference/extract_trend.md)
+  con i metodi `llt` e `smooth`: l’errore standard del trend
+  (`trend_se`) e i relativi limiti non risultano più nulli o imprecisi
+  quando la varianza della pendenza è prossima a zero. La varianza
+  lisciata, calcolata con una covarianza iniziale troppo diffusa,
+  perdeva le cifre significative e poteva risultare negativa; ora la
+  covarianza iniziale è più contenuta. Il trend stimato varia per meno
+  di 1e-6 nei casi esaminati, gli errori standard tornano coerenti.
+- [`robust_smooth()`](https://gmontaletti.github.io/skillviz/reference/robust_smooth.md)
+  con il metodo `smooth_t` usa la stessa covarianza iniziale, in modo
+  che resti coincidente con il metodo `smooth` a parità di parametri.
+
 ## skillviz 0.8.0
 
 ### Stock di annunci aperti

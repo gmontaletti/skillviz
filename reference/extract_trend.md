@@ -203,26 +203,26 @@ d <- data.table::data.table(
 )
 tr <- extract_trend(d, "source", "week", "n", max_harmonics = 2L)
 head(tr)
-#>    source       week observed   seasonal    trend trend_filtered    trend_se
-#>    <char>     <IDat>    <num>      <num>    <num>          <num>       <num>
-#> 1:      a 2023-05-01 5.160749 0.18052902 4.987748       4.980220 0.001636927
-#> 2:      a 2023-05-08 5.175483 0.16846276 4.991509       4.998774 0.000780673
-#> 3:      a 2023-05-15 5.132962 0.15395670 4.995264       4.990640 0.001014808
-#> 4:      a 2023-05-22 5.191788 0.13722092 4.999014       5.021635 0.001235456
-#> 5:      a 2023-05-29 5.137803 0.11849782 5.002755       5.025673 0.001443171
-#> 6:      a 2023-06-05 5.085656 0.09805854 5.006486       5.017155 0.001638417
+#>    source       week observed   seasonal    trend trend_filtered     trend_se
+#>    <char>     <IDat>    <num>      <num>    <num>          <num>        <num>
+#> 1:      a 2023-05-01 5.160749 0.18052901 4.987748       4.980220 0.0005321449
+#> 2:      a 2023-05-08 5.175483 0.16846275 4.991509       4.998719 0.0007806714
+#> 3:      a 2023-05-15 5.132962 0.15395669 4.995264       4.990626 0.0010148063
+#> 4:      a 2023-05-22 5.191788 0.13722092 4.999014       5.021606 0.0012354536
+#> 5:      a 2023-05-29 5.137803 0.11849781 5.002755       5.025654 0.0014431679
+#> 6:      a 2023-06-05 5.085656 0.09805853 5.006486       5.017144 0.0016384141
 #>    trend_lo trend_hi    remainder imputed method
 #>       <num>    <num>        <num>  <lgcl> <char>
-#> 1: 4.984540 4.990956 -0.007528133   FALSE    llt
-#> 2: 4.989979 4.993039  0.015512034   FALSE    llt
-#> 3: 4.993276 4.997253 -0.016258887   FALSE    llt
-#> 4: 4.996592 5.001435  0.055553513   FALSE    llt
-#> 5: 4.999926 5.005583  0.016550324   FALSE    llt
-#> 6: 5.003275 5.009698 -0.018888662   FALSE    llt
+#> 1: 4.986705 4.988791 -0.007528103   FALSE    llt
+#> 2: 4.989979 4.993039  0.015512077   FALSE    llt
+#> 3: 4.993275 4.997253 -0.016258832   FALSE    llt
+#> 4: 4.996592 5.001435  0.055553578   FALSE    llt
+#> 5: 4.999926 5.005583  0.016550398   FALSE    llt
+#> 6: 5.003275 5.009697 -0.018888580   FALSE    llt
 attr(tr, "fits")
 #>    source method     K      aicc var_level    var_slope      var_obs
 #>    <char> <char> <int>     <num>     <num>        <num>        <num>
-#> 1:      a    llt     1 -648.7773         0 6.098826e-09 0.0007024439
+#> 1:      a    llt     1 -648.7773         0 6.098825e-09 0.0007024439
 #>    convergence zero_variance fixed_variance boundary retried    start
 #>          <int>        <char>         <char>   <lgcl>  <lgcl>   <char>
 #> 1:           0         level                    TRUE   FALSE rescaled
@@ -235,5 +235,5 @@ ts_ <- extract_trend(d, "source", "week", "n", method = "smooth",
 attr(ts_, "fits")[, c("var_level", "var_slope", "var_obs", "fixed_variance")]
 #>    var_level    var_slope      var_obs fixed_variance
 #>        <num>        <num>        <num>         <char>
-#> 1:         0 6.063695e-09 0.0007042898          level
+#> 1:         0 6.063691e-09 0.0007042898          level
 ```

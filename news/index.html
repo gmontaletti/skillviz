@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.8.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.8.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,6 +32,16 @@
       <small>Source: <a href="https://github.com/gmontaletti/skillviz/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.8.1" id="skillviz-081">skillviz 0.8.1<a class="anchor" aria-label="anchor" href="#skillviz-081"></a></h2>
+<div class="section level3">
+<h3 id="correzioni-0-8-1">Correzioni<a class="anchor" aria-label="anchor" href="#correzioni-0-8-1"></a></h3>
+<ul><li>
+<code><a href="../reference/extract_trend.html">extract_trend()</a></code> con i metodi <code>llt</code> e <code>smooth</code>: l’errore standard del trend (<code>trend_se</code>) e i relativi limiti non risultano più nulli o imprecisi quando la varianza della pendenza è prossima a zero. La varianza lisciata, calcolata con una covarianza iniziale troppo diffusa, perdeva le cifre significative e poteva risultare negativa; ora la covarianza iniziale è più contenuta. Il trend stimato varia per meno di 1e-6 nei casi esaminati, gli errori standard tornano coerenti.</li>
+<li>
+<code><a href="../reference/robust_smooth.html">robust_smooth()</a></code> con il metodo <code>smooth_t</code> usa la stessa covarianza iniziale, in modo che resti coincidente con il metodo <code>smooth</code> a parità di parametri.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.8.0" id="skillviz-080">skillviz 0.8.0<a class="anchor" aria-label="anchor" href="#skillviz-080"></a></h2>
 <div class="section level3">

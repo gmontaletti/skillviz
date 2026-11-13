@@ -15,7 +15,7 @@ jointly with the trend by backfitting."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">skillviz</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.8.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.8.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -236,26 +236,26 @@ parameters for <code>llt</code> and 2 for <code>smooth</code>.</p>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">tr</span> <span class="op">&lt;-</span> <span class="fu">extract_trend</span><span class="op">(</span><span class="va">d</span>, <span class="st">"source"</span>, <span class="st">"week"</span>, <span class="st">"n"</span>, max_harmonics <span class="op">=</span> <span class="fl">2L</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">tr</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    source       week observed   seasonal    trend trend_filtered    trend_se</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>    &lt;char&gt;     &lt;IDat&gt;    &lt;num&gt;      &lt;num&gt;    &lt;num&gt;          &lt;num&gt;       &lt;num&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1:      a 2023-05-01 5.160749 0.18052902 4.987748       4.980220 0.001636927</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2:      a 2023-05-08 5.175483 0.16846276 4.991509       4.998774 0.000780673</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3:      a 2023-05-15 5.132962 0.15395670 4.995264       4.990640 0.001014808</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4:      a 2023-05-22 5.191788 0.13722092 4.999014       5.021635 0.001235456</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5:      a 2023-05-29 5.137803 0.11849782 5.002755       5.025673 0.001443171</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6:      a 2023-06-05 5.085656 0.09805854 5.006486       5.017155 0.001638417</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    source       week observed   seasonal    trend trend_filtered     trend_se</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    &lt;char&gt;     &lt;IDat&gt;    &lt;num&gt;      &lt;num&gt;    &lt;num&gt;          &lt;num&gt;        &lt;num&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:      a 2023-05-01 5.160749 0.18052901 4.987748       4.980220 0.0005321449</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2:      a 2023-05-08 5.175483 0.16846275 4.991509       4.998719 0.0007806714</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3:      a 2023-05-15 5.132962 0.15395669 4.995264       4.990626 0.0010148063</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4:      a 2023-05-22 5.191788 0.13722092 4.999014       5.021606 0.0012354536</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5:      a 2023-05-29 5.137803 0.11849781 5.002755       5.025654 0.0014431679</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6:      a 2023-06-05 5.085656 0.09805853 5.006486       5.017144 0.0016384141</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    trend_lo trend_hi    remainder imputed method</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>       &lt;num&gt;    &lt;num&gt;        &lt;num&gt;  &lt;lgcl&gt; &lt;char&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1: 4.984540 4.990956 -0.007528133   FALSE    llt</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2: 4.989979 4.993039  0.015512034   FALSE    llt</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3: 4.993276 4.997253 -0.016258887   FALSE    llt</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4: 4.996592 5.001435  0.055553513   FALSE    llt</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5: 4.999926 5.005583  0.016550324   FALSE    llt</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6: 5.003275 5.009698 -0.018888662   FALSE    llt</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1: 4.986705 4.988791 -0.007528103   FALSE    llt</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2: 4.989979 4.993039  0.015512077   FALSE    llt</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3: 4.993275 4.997253 -0.016258832   FALSE    llt</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4: 4.996592 5.001435  0.055553578   FALSE    llt</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5: 4.999926 5.005583  0.016550398   FALSE    llt</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6: 5.003275 5.009697 -0.018888580   FALSE    llt</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">tr</span>, <span class="st">"fits"</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    source method     K      aicc var_level    var_slope      var_obs</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    &lt;char&gt; &lt;char&gt; &lt;int&gt;     &lt;num&gt;     &lt;num&gt;        &lt;num&gt;        &lt;num&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1:      a    llt     1 -648.7773         0 6.098826e-09 0.0007024439</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:      a    llt     1 -648.7773         0 6.098825e-09 0.0007024439</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    convergence zero_variance fixed_variance boundary retried    start</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>          &lt;int&gt;        &lt;char&gt;         &lt;char&gt;   &lt;lgcl&gt;  &lt;lgcl&gt;   &lt;char&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1:           0         level                    TRUE   FALSE rescaled</span>
@@ -268,7 +268,7 @@ parameters for <code>llt</code> and 2 for <code>smooth</code>.</p>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">ts_</span>, <span class="st">"fits"</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"var_level"</span>, <span class="st">"var_slope"</span>, <span class="st">"var_obs"</span>, <span class="st">"fixed_variance"</span><span class="op">)</span><span class="op">]</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    var_level    var_slope      var_obs fixed_variance</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>        &lt;num&gt;        &lt;num&gt;        &lt;num&gt;         &lt;char&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1:         0 6.063695e-09 0.0007042898          level</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:         0 6.063691e-09 0.0007042898          level</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
