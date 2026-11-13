@@ -92,6 +92,28 @@ test_that("llt recovers a known trend and seasonal component", {
   expect_identical(attr(tr, "transform"), "log")
 })
 
+test_that("llt smoothed variance stays positive near the slope boundary", {
+  # With the StructTS default diffuse prior (1e4 * var) the smoothed
+  # variance lost its significant digits at a (near) zero slope variance
+  # and came out negative, i.e. a zero standard error after clamping. The
+  # model is rebuilt here with fixed variances, independent of the ML fit.
+  for (seed in 1:6) {
+    d <- sim_weekly(seed = seed)
+    y <- log(d$n)
+    for (vs in c(1e-7, 1e-9, 1e-11, 0)) {
+      fit <- suppressWarnings(stats::StructTS(stats::ts(y), "trend"))
+      mod <- fit$model0
+      mod$a <- c(y[1L], 0)
+      mod$P[] <- skillviz:::.ti_kappa * stats::var(y)
+      mod$Pn[] <- 0
+      mod$V <- diag(c(0, vs))
+      mod$h <- 7e-4
+      v <- stats::KalmanSmooth(y, mod, nit = -1L)$var[, 1L, 1L]
+      expect_true(all(v > 0), info = paste(seed, vs))
+    }
+  }
+})
+
 test_that("K selection picks K = 0 without seasonality", {
   d <- sim_weekly(amp = 0, seed = 3L)
   fits <- attr(extract_trend(d, "source", "week", "n"), "fits")

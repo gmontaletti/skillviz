@@ -707,7 +707,7 @@ whittaker_smooth <- function(
 #' slope, slope_{t+1} = phi * slope_t + eta_t. NA weeks are skipped in the
 #' update. The initial state is the one of .ti_trend_llt() (StructTS model0
 #' with a = (first observed value, 0) and every entry of P equal to
-#' 1e4 * var(x), at time 0, predicted to time 1 with T as KalmanSmooth()
+#' `.ti_kappa` * var(x), at time 0, predicted to time 1 with T as KalmanSmooth()
 #' does), so that with constant `h` and `phi = 1` the result equals the
 #' KalmanSmooth() output of the `smooth` method; the same diffuse start is
 #' used for every `phi`. The backward pass is the de Jong / Durbin-Koopman
@@ -722,7 +722,7 @@ whittaker_smooth <- function(
 #' @noRd
 .rs_kf_smooth <- function(x, h, var_slope, phi = 1) {
   n <- length(x)
-  kap <- 1e4 * max(stats::var(x, na.rm = TRUE), .Machine$double.eps)
+  kap <- .ti_kappa * max(stats::var(x, na.rm = TRUE), .Machine$double.eps)
   # predicted states and covariances, innovations
   ap1 <- ap2 <- pp11 <- pp12 <- pp22 <- numeric(n)
   af1 <- pf11 <- pf12 <- numeric(n)
