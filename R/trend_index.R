@@ -328,7 +328,9 @@
   # the full series (leading NA too)
   mod <- fit$model0
   mod$a <- c(xf[1L], 0)
-  mod$P[] <- 1e6 * stats::var(xf, na.rm = TRUE) / 100
+  # diffuse prior of scale .ti_kappa instead of the StructTS default (1e4):
+  # see .ti_kappa for the loss of precision in the smoothed variance
+  mod$P[] <- .ti_kappa * stats::var(xf, na.rm = TRUE)
   mod$Pn[] <- 0
   mod$V <- diag(unname(coef[1:2]))
   mod$h <- unname(coef[3L])
@@ -355,6 +357,18 @@
     degenerate = !ok[[pick]]
   )
 }
+
+#' Scale of the diffuse initial state covariance of the Kalman smoothers
+#'
+#' The initial covariance is `.ti_kappa * var(x)`. The StructTS default
+#' (1e4) makes the smoothed variance, a difference of terms of order
+#' kappa, lose all its significant digits when the slope variance is near
+#' zero: it can come out negative and be clamped to a zero standard error.
+#' 1 keeps the smoothed variance accurate (it no longer changes with kappa
+#' to 3 digits) and moves the smoothed state by less than 1e-6.
+#' @keywords internal
+#' @noRd
+.ti_kappa <- 1
 
 #' Additive ETS trend (A or Ad) by fable on the interpolated series
 #' @keywords internal

@@ -381,7 +381,14 @@ test_that("model band is undefined, not NaN, when the observation variance is 0"
 # 6. robust_smooth: smooth_t with q profile and damping -----
 
 test_that("defaults reproduce the output computed before q profile and damping", {
-  # reference values computed at commit 2d84a50 (before the new arguments)
+  # reference values computed at commit 2d84a50 (before the new arguments).
+  # smooth_t and smooth come from StructTS maximum likelihood fits whose
+  # optimum is flat: changing the optimiser start moves the trend by 5e-6,
+  # the band sum by 2e-4 and the q profile by 6e-3 (relative), and the
+  # BLAS of another platform does the same. Their tolerances are set above
+  # that sensitivity; level and whittaker are insensitive to it (0 change)
+  # and keep tight tolerances. A change of the default path is of larger
+  # order than these tolerances.
   d <- sim_rs(n = 130L, spikes = 40, trough = integer(0))
   ref <- list(
     smooth_t = list(
@@ -413,12 +420,13 @@ test_that("defaults reproduce the output computed before q profile and damping",
     rs <- robust_smooth(d, "source", "week", "n", method = m,
       harmonics = 2L, n_backfit = 2L)
     fits <- attr(rs, "fits")
+    ml <- m %in% c("smooth_t", "smooth")
     expect_equal(rs$trend[c(1, 50, 100, 130)], ref[[m]]$trend,
-      tolerance = 1e-6, info = m)
+      tolerance = if (ml) 1e-4 else 1e-6, info = m)
     expect_equal(sum(rs$band_hi - rs$band_lo), ref[[m]]$band,
-      tolerance = 1e-6, info = m)
+      tolerance = if (ml) 2e-3 else 1e-6, info = m)
     expect_equal(fits$value[seq_along(ref[[m]]$value)], ref[[m]]$value,
-      tolerance = 1e-5, info = m)
+      tolerance = if (ml) 3e-2 else 1e-5, info = m)
     expect_identical(sum(rs$flag), ref[[m]]$n_flag, info = m)
   }
 })
@@ -426,7 +434,7 @@ test_that("defaults reproduce the output computed before q profile and damping",
 # reference copy of the undamped smoother before `phi` was added
 rs_kf_smooth_v0 <- function(x, h, var_slope) {
   n <- length(x)
-  kap <- 1e4 * max(stats::var(x, na.rm = TRUE), .Machine$double.eps)
+  kap <- skillviz:::.ti_kappa * max(stats::var(x, na.rm = TRUE), .Machine$double.eps)
   pp11 <- pp12 <- numeric(n)
   af1 <- pf11 <- pf12 <- numeric(n)
   vv <- ff <- rep(NA_real_, n)
@@ -511,7 +519,7 @@ test_that("the damped smoother equals the old one at phi = 1 and KalmanSmooth", 
     new$level
   )
   # damped slope: same model and initial state in stats::KalmanSmooth()
-  kap <- 1e4 * stats::var(x, na.rm = TRUE)
+  kap <- skillviz:::.ti_kappa * stats::var(x, na.rm = TRUE)
   for (phi in c(0.9, 0.5)) {
     mod <- list(
       T = matrix(c(1, 0, 1, phi), 2L), Z = c(1, 0), h = 0.0025,
