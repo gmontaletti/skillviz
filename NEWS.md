@@ -1,3 +1,29 @@
+# skillviz (development version)
+
+## Professioni di riferimento fra classificazioni
+
+* Nuove funzioni per associare a ogni codice di una classificazione delle
+  professioni (per esempio CP2021 a cinque cifre) una professione di
+  riferimento dell'altra (per esempio ESCO a cinque cifre):
+  - `skill_idf()` calcola l'inverse document frequency delle competenze sugli
+    annunci, da usare come pesatura comune a più classificazioni;
+  - `skill_profiles()` costruisce i profili di competenze per codice (quota
+    di annunci che contengono ciascuna competenza, pesata IDF) come matrice
+    sparsa codice × competenza;
+  - `build_reference_professions()` sceglie, per ogni codice dell'universo
+    ufficiale, il riferimento per frequenza (la moda degli annunci con
+    entrambi i codici, da `build_esco_cp_crosswalk()`) se gli annunci in
+    comune sono almeno `n_min`, altrimenti per similarità del profilo
+    (coseno massimo), altrimenti nessuno, con il motivo;
+  - `calibrate_reference_threshold()` calibra `n_min` confrontando la
+    concordanza della moda di sottocampioni di k annunci con la moda
+    completa e la concordanza del riferimento per similarità;
+  - `transfer_skill_profile()` assegna a ogni codice il profilo della sua
+    professione di riferimento;
+  - `validate_profile_transfer()` confronta il profilo trasferito con quello
+    osservato, rispetto al profilo del gruppo padre (senza il codice) e a
+    quello di un codice a caso dello stesso padre.
+
 # skillviz 0.8.1
 
 ## Correzioni
