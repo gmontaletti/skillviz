@@ -621,3 +621,142 @@ test_that("validate_profile_transfer validates its input", {
     "missing required columns"
   )
 })
+
+# 8. group_mixture_weights() -----
+
+.rp_mix_data <- function() {
+  postings <- data.table::data.table(
+    esco = c(
+      rep("1000.1", 3), "1000.2", "1000.2", "1000.3",
+      "2000.1", "Unclassifiable", "3000.1"
+    ),
+    cp = c(
+      "1.1.1.1.0", "1.1.1.1.0", "1.1.1.2.0", "1.1.1.2.0", "",
+      "9.9.9.9.0", "", "1.1.1.1.0", "3.3.3.3.0"
+    )
+  )
+  group <- data.table::data.table(
+    code = c("1000.1", "1000.2", "1000.3", "2000.1", "3000.1"),
+    parent = c("1000", "1000", "1000", "2000", "3000")
+  )
+  list(postings = postings, group = group)
+}
+
+test_that("group weights are the arrival codes of the whole group", {
+  d <- .rp_mix_data()
+  w <- group_mixture_weights(d$postings, "esco", "cp", d$group)
+  expect_identical(
+    w[code == "1000.2", ref_code],
+    c("1.1.1.1.0", "1.1.1.2.0", "9.9.9.9.0")
+  )
+  expect_equal(w[code == "1000.2", weight], c(2, 2, 1), tolerance = 1e-12)
+  expect_identical(
+    w[code == "1000.1", weight],
+    w[code == "1000.2", weight]
+  )
+  # 2000.1 has no doubly-coded postings in its group.
+  expect_false("2000.1" %in% w$code)
+  expect_identical(w[code == "3000.1", weight], 1)
+})
+
+test_that("leaving one out removes the code's own postings", {
+  d <- .rp_mix_data()
+  w <- group_mixture_weights(
+    d$postings, "esco", "cp", d$group,
+    leave_one_out = TRUE
+  )
+  # 1000.1 has 2 x 1.1.1.1.0 and 1 x 1.1.1.2.0 of its own.
+  expect_identical(w[code == "1000.1", ref_code], c("1.1.1.2.0", "9.9.9.9.0"))
+  expect_equal(w[code == "1000.1", weight], c(1, 1), tolerance = 1e-12)
+  # 3000.1 is alone in its group: nothing left.
+  expect_false("3000.1" %in% w$code)
+})
+
+test_that("group_mixture_weights validates its input", {
+  d <- .rp_mix_data()
+  expect_error(group_mixture_weights(list(), "esco", "cp", d$group), "data.frame")
+  expect_error(
+    group_mixture_weights(d$postings, "esco", "cp", data.frame(code = "a")),
+    "missing required columns"
+  )
+  expect_error(
+    group_mixture_weights(d$postings, "esco", "cp", d$group, leave_one_out = NA),
+    "leave_one_out"
+  )
+  expect_error(
+    group_mixture_weights(
+      d$postings, "esco", "cp",
+      data.frame(code = c("a", "a"), parent = "p")
+    ),
+    "unique"
+  )
+})
+
+# 9. transfer_skill_profile_mixture() -----
+
+.rp_mix_profiles <- function() {
+  Matrix::Matrix(
+    rbind(c(1, 0, 0), c(0, 1, 0), c(0, 0, 1)),
+    sparse = TRUE,
+    dimnames = list(
+      c("1.1.1.1.0", "1.1.1.2.0", "9.9.9.9.0"),
+      c("a", "b", "c")
+    )
+  )
+}
+
+test_that("the mixture is the renormalised weighted mean of usable profiles", {
+  p <- .rp_mix_profiles()
+  w <- data.table::data.table(
+    code = c("e1", "e1", "e1", "e2"),
+    ref_code = c("1.1.1.1.0", "1.1.1.2.0", "9.9.9.9.0", "9.9.9.9.0"),
+    weight = c(3, 1, 4, 2)
+  )
+  m <- transfer_skill_profile_mixture(
+    p, w,
+    usable = c("1.1.1.1.0", "1.1.1.2.0")
+  )
+  expect_identical(rownames(m), "e1")
+  expect_identical(colnames(m), c("a", "b", "c"))
+  expect_equal(as.numeric(m["e1", ]), c(0.75, 0.25, 0), tolerance = 1e-12)
+  cov <- attr(m, "coverage")
+  expect_identical(cov$code, c("e1", "e2"))
+  expect_equal(cov$covered_share, c(0.5, 0), tolerance = 1e-12)
+  expect_identical(cov$n_refs, c(3L, 1L))
+  expect_identical(cov$n_refs_covered, c(2L, 0L))
+})
+
+test_that("a single reference reproduces transfer_skill_profile()", {
+  p <- .rp_mix_profiles()
+  w <- data.table::data.table(
+    code = c("e1", "e2"),
+    ref_code = c("1.1.1.2.0", "9.9.9.9.0"),
+    weight = c(5, 1)
+  )
+  m <- transfer_skill_profile_mixture(p, w)
+  t1 <- transfer_skill_profile(p, w)
+  expect_equal(as.matrix(m), as.matrix(t1), tolerance = 1e-12, ignore_attr = TRUE)
+})
+
+test_that("transfer_skill_profile_mixture validates its input", {
+  p <- .rp_mix_profiles()
+  expect_error(transfer_skill_profile_mixture(1:3, data.frame()), "matrix")
+  expect_error(
+    transfer_skill_profile_mixture(
+      p,
+      data.frame(code = "e", ref_code = "a", weight = -1)
+    ),
+    "non-negative"
+  )
+  expect_error(
+    transfer_skill_profile_mixture(
+      p,
+      data.frame(code = c("e", "e"), ref_code = "a", weight = 1)
+    ),
+    "one row"
+  )
+  expect_error(
+    transfer_skill_profile_mixture(p, data.frame(code = "e")),
+    "missing required columns"
+  )
+})

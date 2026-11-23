@@ -49,6 +49,8 @@ reference:
       - calibrate_reference_threshold
       - transfer_skill_profile
       - validate_profile_transfer
+      - group_mixture_weights
+      - transfer_skill_profile_mixture
 
   - title: Skill Relevance Analysis
     desc: Compute specialization indices, TF-IDF diffusion scores, and skill classification.

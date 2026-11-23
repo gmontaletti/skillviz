@@ -22,7 +22,13 @@
     professione di riferimento;
   - `validate_profile_transfer()` confronta il profilo trasferito con quello
     osservato, rispetto al profilo del gruppo padre (senza il codice) e a
-    quello di un codice a caso dello stesso padre.
+    quello di un codice a caso dello stesso padre;
+  - `group_mixture_weights()` calcola, per ogni codice, la distribuzione dei
+    codici dell'altra classificazione negli annunci con entrambi i codici del
+    suo gruppo padre, con l'opzione di escludere gli annunci del codice;
+  - `transfer_skill_profile_mixture()` assegna a ogni codice la media dei
+    profili pesata con quei pesi, rinormalizzata sui profili usabili, e
+    riporta la quota di peso coperta.
 
 # skillviz 0.8.1
 

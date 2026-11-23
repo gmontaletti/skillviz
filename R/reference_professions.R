@@ -23,9 +23,21 @@
 # 4. build_reference_professions();
 # 5. calibrate_reference_threshold();
 # 6. transfer_skill_profile();
-# 7. validate_profile_transfer().
+# 7. validate_profile_transfer();
+# 8. group_mixture_weights();
+# 9. transfer_skill_profile_mixture().
 
 utils::globalVariables(c(
+  "grp_parent",
+  "n_grp",
+  "n_own",
+  "weight",
+  "weight_total",
+  "weight_covered",
+  "n_refs",
+  "n_refs_covered",
+  "covered",
+  "covered_share",
   "code",
   "label",
   "parent",
@@ -1344,4 +1356,234 @@ validate_profile_transfer <- function(
   )
 
   list(codes = out[], summary = summ[], share_better = share_better)
+}
+
+# 8. group_mixture_weights() -----
+
+#' Mixture weights from the doubly-coded postings of a parent group
+#'
+#' For every code of the starting classification, the distribution of the
+#' arrival codes among the doubly-coded postings of the code's whole parent
+#' group, optionally leaving out the code's own postings. The weights feed
+#' [transfer_skill_profile_mixture()].
+#'
+#' @param postings A `data.frame` with one row per posting and the columns
+#'   `from_col` and `to_col`.
+#' @param from_col,to_col Names of the starting and arrival code columns.
+#' @param group A `data.frame` with columns `code` and `parent`: the parent
+#'   group of each starting code (for example the universe of
+#'   [build_reference_professions()]). Every code of `group` gets the weights
+#'   of its parent; postings whose starting code is not in `group` are
+#'   ignored.
+#' @param leave_one_out If `TRUE`, the doubly-coded postings of the code
+#'   itself are removed from its weights. Default `FALSE`.
+#' @param from_na,to_na Values of the two code columns that mean "no code".
+#'
+#' @return A `data.table` with `code`, `parent`, `ref_code` (arrival code)
+#'   and `weight` (number of doubly-coded postings of the group with that
+#'   arrival code, minus the code's own with `leave_one_out = TRUE`), one row
+#'   per code and arrival code with positive weight, sorted by code and
+#'   `ref_code`. Codes whose group has no doubly-coded postings (or, leaving
+#'   one out, none besides their own) have no row.
+#'
+#' @examples
+#' postings <- data.table::data.table(
+#'   esco = c("1000.1", "1000.1", "1000.2", "2000.1"),
+#'   cp = c("1.1.1.1.0", "1.1.1.1.0", "1.1.1.2.0", "")
+#' )
+#' group <- data.table::data.table(
+#'   code = c("1000.1", "1000.2", "2000.1"),
+#'   parent = c("1000", "1000", "2000")
+#' )
+#' group_mixture_weights(postings, "esco", "cp", group)
+#' group_mixture_weights(postings, "esco", "cp", group, leave_one_out = TRUE)
+#' @export
+group_mixture_weights <- function(
+  postings,
+  from_col,
+  to_col,
+  group,
+  leave_one_out = FALSE,
+  from_na = c("", "Unclassifiable"),
+  to_na = c("", "Unclassifiable")
+) {
+  caller <- "group_mixture_weights"
+  if (!is.data.frame(postings)) {
+    stop(caller, ": `postings` must be a data.frame.", call. = FALSE)
+  }
+  check_columns(postings, c(from_col, to_col), caller = caller)
+  if (!is.data.frame(group)) {
+    stop(caller, ": `group` must be a data.frame.", call. = FALSE)
+  }
+  check_columns(group, c("code", "parent"), caller = caller)
+  if (!is.logical(leave_one_out) || length(leave_one_out) != 1L ||
+    is.na(leave_one_out)) {
+    stop(caller, ": `leave_one_out` must be TRUE or FALSE.", call. = FALSE)
+  }
+  g <- data.table::data.table(
+    code = as.character(group[["code"]]),
+    parent = as.character(group[["parent"]])
+  )
+  if (anyNA(g$code) || anyDuplicated(g$code)) {
+    stop(
+      caller,
+      ": the codes of `group` must be unique and not missing.",
+      call. = FALSE
+    )
+  }
+  g <- g[!is.na(parent)]
+
+  # 8a. Doubly-coded postings with their group -----
+  d <- data.table::data.table(
+    code = .ref_clean_code(postings[[from_col]], from_na),
+    ref_code = .ref_clean_code(postings[[to_col]], to_na)
+  )
+  d <- d[!is.na(code) & !is.na(ref_code)]
+  d[, grp_parent := g$parent[match(code, g$code)]]
+  d <- d[!is.na(grp_parent)]
+
+  # 8b. Group counts, given to every code of the group -----
+  n_g <- d[, list(n_grp = .N), by = list(grp_parent, ref_code)]
+  out <- merge(
+    g[, list(code, grp_parent = parent)],
+    n_g,
+    by = "grp_parent",
+    allow.cartesian = TRUE
+  )
+  if (leave_one_out) {
+    n_e <- d[, list(n_own = .N), by = list(code, ref_code)]
+    out <- merge(out, n_e, by = c("code", "ref_code"), all.x = TRUE)
+    out[is.na(n_own), n_own := 0L]
+    out[, weight := as.numeric(n_grp - n_own)]
+  } else {
+    out[, weight := as.numeric(n_grp)]
+  }
+  out <- out[weight > 0, list(code, parent = grp_parent, ref_code, weight)]
+  data.table::setorderv(out, c("code", "ref_code"))
+  out[]
+}
+
+# 9. transfer_skill_profile_mixture() -----
+
+#' Transfer skill profiles as a weighted mixture of profiles
+#'
+#' Gives each code a weighted mean of the skill profiles of several codes of
+#' the other classification, for example the arrival codes of the
+#' doubly-coded postings of its parent group ([group_mixture_weights()]).
+#' Only codes with a usable profile enter the mixture, and the weights are
+#' renormalised over them.
+#'
+#' @param profiles_from Profile matrix of the classification the profiles come
+#'   from (rows named by its codes), as returned by [skill_profiles()].
+#' @param weights A `data.frame` with one row per code and contributing code:
+#'   columns `code_col`, `ref_col` and `weight_col` (non-negative).
+#' @param code_col,ref_col,weight_col Column names in `weights`. Defaults
+#'   `"code"`, `"ref_code"`, `"weight"`.
+#' @param usable Row names of `profiles_from` allowed in the mixture.
+#'   Default: all rows.
+#'
+#' @return A sparse matrix with one row per code with a positive covered
+#'   weight (sorted by code) and the columns of `profiles_from`. Row \eqn{e}
+#'   is \eqn{\sum_{c \in U} w_{ec} x_c / \sum_{c \in U} w_{ec}}, where
+#'   \eqn{U} is the set of usable codes. Attribute `coverage` is a
+#'   `data.table` with one row per code of `weights`: `weight_total`,
+#'   `weight_covered`, `covered_share` (`weight_covered / weight_total`),
+#'   `n_refs` and `n_refs_covered`.
+#'
+#' @examples
+#' profiles <- Matrix::Matrix(
+#'   rbind(c(1, 0), c(0, 1), c(1, 1)), sparse = TRUE,
+#'   dimnames = list(c("1.1.1.1.0", "1.1.1.2.0", "9.9.9.9.0"), c("a", "b"))
+#' )
+#' weights <- data.frame(
+#'   code = c("1000.1", "1000.1", "1000.1"),
+#'   ref_code = c("1.1.1.1.0", "1.1.1.2.0", "9.9.9.9.0"),
+#'   weight = c(3, 1, 4)
+#' )
+#' m <- transfer_skill_profile_mixture(
+#'   profiles, weights, usable = c("1.1.1.1.0", "1.1.1.2.0")
+#' )
+#' as.matrix(m)
+#' attr(m, "coverage")
+#' @export
+transfer_skill_profile_mixture <- function(
+  profiles_from,
+  weights,
+  code_col = "code",
+  ref_col = "ref_code",
+  weight_col = "weight",
+  usable = rownames(profiles_from)
+) {
+  caller <- "transfer_skill_profile_mixture"
+  if (!inherits(profiles_from, "Matrix") && !is.matrix(profiles_from)) {
+    stop(caller, ": `profiles_from` must be a matrix.", call. = FALSE)
+  }
+  if (is.null(rownames(profiles_from))) {
+    stop(caller, ": `profiles_from` must have row names.", call. = FALSE)
+  }
+  if (!is.data.frame(weights)) {
+    stop(caller, ": `weights` must be a data.frame.", call. = FALSE)
+  }
+  check_columns(weights, c(code_col, ref_col, weight_col), caller = caller)
+  w <- data.table::data.table(
+    code = as.character(weights[[code_col]]),
+    ref_code = as.character(weights[[ref_col]]),
+    weight = as.numeric(weights[[weight_col]])
+  )
+  if (anyNA(w$code) || anyNA(w$weight) || any(w$weight < 0)) {
+    stop(
+      caller,
+      ": `weights` must have codes and non-negative weights.",
+      call. = FALSE
+    )
+  }
+  if (anyDuplicated(w, by = c("code", "ref_code"))) {
+    stop(
+      caller,
+      ": `weights` must have one row per code and reference.",
+      call. = FALSE
+    )
+  }
+  usable <- intersect(as.character(usable), rownames(profiles_from))
+  w[, covered := !is.na(ref_code) & ref_code %chin% usable & weight > 0]
+
+  # 9a. Coverage of the weights -----
+  cov <- w[,
+    list(
+      weight_total = sum(weight),
+      weight_covered = sum(weight[covered]),
+      n_refs = sum(weight > 0),
+      n_refs_covered = sum(covered)
+    ),
+    by = code
+  ]
+  cov[,
+    covered_share := data.table::fifelse(
+      weight_total > 0,
+      weight_covered / weight_total,
+      NA_real_
+    )
+  ]
+  data.table::setcolorder(
+    cov,
+    c("code", "weight_total", "weight_covered", "covered_share")
+  )
+  data.table::setorderv(cov, "code")
+
+  # 9b. Weighted mean of the usable profiles -----
+  wc <- w[covered == TRUE]
+  rows <- cov[weight_covered > 0, code]
+  refs <- sort(unique(wc$ref_code), method = "radix")
+  wc[, weight := weight / sum(weight), by = code]
+  wm <- Matrix::sparseMatrix(
+    i = match(wc$code, rows),
+    j = match(wc$ref_code, refs),
+    x = wc$weight,
+    dims = c(length(rows), length(refs))
+  )
+  p <- .ref_as_csparse(profiles_from)[refs, , drop = FALSE]
+  out <- .ref_as_csparse(wm %*% p)
+  dimnames(out) <- list(rows, colnames(profiles_from))
+  attr(out, "coverage") <- cov[]
+  out
 }
