@@ -47,29 +47,7 @@ When working with PostgreSQL, always check the correct schema (usually 'public')
 When running R scripts or targets pipelines, watch for silent error swallowing via tryCatch. If a script completes with no output or empty results, immediately check error handling before re-running.
 
 
-## Module Organization
-
-| File | Domain | Key Functions |
-|------|--------|---------------|
-| `R/read_data.R` | Data loading | `read_esco_mapping()`, `read_isco_groups()`, `deduplicate_annunci()` |
-| `R/crosswalk.R` | Classification mapping | `build_cpi_esco_crosswalk()`, `prepare_annunci_esco()`, `prepare_annunci_geography()` |
-| `R/relevance.R` | Skill analysis | `compute_balassa_index()`, `compute_skill_diffusion()`, `build_skillist()`, `compute_idf_classification()` |
-| `R/cooccurrence.R` | Co-occurrence networks | `cooc_all_professions()`, `compute_cooc_matrix()`, `filter_relative_risk()` |
-| `R/salary.R` | Salary analysis | `extract_salary_data()`, `compute_salary_by_period()`, `compute_salary_by_skill()` |
-| `R/source_stability.R` | Source filtering | `prepare_source_tsibble()`, `compute_source_features()`, `filter_stable_sources()` |
-| `R/communities.R` | Community detection | `detect_skill_communities()` |
-| `R/distance.R` | Professional distance | `compute_profession_distance()`, `cluster_professions()` |
-| `R/extract.R` | Skill extraction | `extract_specific_skills_cpi3()`, `build_profession_skill_profile()` |
-| `R/temporal.R` | Temporal analysis | `compute_skill_ranking_series()`, `compute_skill_variation()` |
-| `R/plot.R` | Visualization | `plot_cooc_graph()`, `plot_skill_ranking()` |
-| `R/zzz.R` | Package startup | `globalVariables`, `.onLoad` (setDTthreads 75%) |
-| `R/utils.R` | Internal helpers | `check_columns()`, `check_suggests()`, `parse_ymd_columns()` |
-| `R/data.R` | Data documentation | roxygen2 docs for `isco_gruppi`, `skillist`, `cooccorrenza` |
-
 ## Dependencies
-
-- **Imports:** data.table, fst, igraph, Matrix, collapse
-- **Suggests:** ggplot2, ggraph, tidygraph, tsibble, feasts, fable, fabletools, readxl, RPostgres, DBI, lubridate, testthat
 
 Functions using Suggests packages call `check_suggests()` before use.
 
