@@ -17,9 +17,11 @@
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_esco_cp_crosswalk.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_profession_skill_profile.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_profile_pair.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/build_reference_professions.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_skill_prof_sparse.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/build_skillist.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/calibrate_min_support.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/calibrate_reference_threshold.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/check_columns.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/check_suggests.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/classify_emerging_professions.html</loc></url>
@@ -75,6 +77,7 @@
 <url><loc>https://gmontaletti.github.io/skillviz/reference/fit_betabinom.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/fixed_weight_share.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/forecast_share.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/group_mixture_weights.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/henderson_filter.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/henderson_weights.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/index.html</loc></url>
@@ -102,6 +105,8 @@
 <url><loc>https://gmontaletti.github.io/skillviz/reference/score_emergence.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/select_share_model.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/share_interval.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/skill_idf.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/skill_profiles.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/skillist.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/skillviz-deprecated.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/skillviz-package.html</loc></url>
@@ -109,11 +114,14 @@
 <url><loc>https://gmontaletti.github.io/skillviz/reference/standardized_stock.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/stock_from_events.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/to_weekly.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/transfer_skill_profile.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/transfer_skill_profile_mixture.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/tree_fdr.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/trend_concordance.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/trend_diagnostics.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/trend_index.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/trend_revisions.html</loc></url>
+<url><loc>https://gmontaletti.github.io/skillviz/reference/validate_profile_transfer.html</loc></url>
 <url><loc>https://gmontaletti.github.io/skillviz/reference/whittaker_smooth.html</loc></url>
 </urlset>
 

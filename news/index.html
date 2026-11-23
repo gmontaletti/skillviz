@@ -33,6 +33,30 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="development version" id="skillviz-development-version">skillviz (development version)<a class="anchor" aria-label="anchor" href="#skillviz-development-version"></a></h2>
+<div class="section level3">
+<h3 id="professioni-di-riferimento-fra-classificazioni-development-version">Professioni di riferimento fra classificazioni<a class="anchor" aria-label="anchor" href="#professioni-di-riferimento-fra-classificazioni-development-version"></a></h3>
+<ul><li>Nuove funzioni per associare a ogni codice di una classificazione delle professioni (per esempio CP2021 a cinque cifre) una professione di riferimento dell’altra (per esempio ESCO a cinque cifre):
+<ul><li>
+<code><a href="../reference/skill_idf.html">skill_idf()</a></code> calcola l’inverse document frequency delle competenze sugli annunci, da usare come pesatura comune a più classificazioni;</li>
+<li>
+<code><a href="../reference/skill_profiles.html">skill_profiles()</a></code> costruisce i profili di competenze per codice (quota di annunci che contengono ciascuna competenza, pesata IDF) come matrice sparsa codice × competenza;</li>
+<li>
+<code><a href="../reference/build_reference_professions.html">build_reference_professions()</a></code> sceglie, per ogni codice dell’universo ufficiale, il riferimento per frequenza (la moda degli annunci con entrambi i codici, da <code><a href="../reference/build_esco_cp_crosswalk.html">build_esco_cp_crosswalk()</a></code>) se gli annunci in comune sono almeno <code>n_min</code>, altrimenti per similarità del profilo (coseno massimo), altrimenti nessuno, con il motivo;</li>
+<li>
+<code><a href="../reference/calibrate_reference_threshold.html">calibrate_reference_threshold()</a></code> calibra <code>n_min</code> confrontando la concordanza della moda di sottocampioni di k annunci con la moda completa e la concordanza del riferimento per similarità;</li>
+<li>
+<code><a href="../reference/transfer_skill_profile.html">transfer_skill_profile()</a></code> assegna a ogni codice il profilo della sua professione di riferimento;</li>
+<li>
+<code><a href="../reference/validate_profile_transfer.html">validate_profile_transfer()</a></code> confronta il profilo trasferito con quello osservato, rispetto al profilo del gruppo padre (senza il codice) e a quello di un codice a caso dello stesso padre;</li>
+<li>
+<code><a href="../reference/group_mixture_weights.html">group_mixture_weights()</a></code> calcola, per ogni codice, la distribuzione dei codici dell’altra classificazione negli annunci con entrambi i codici del suo gruppo padre, con l’opzione di escludere gli annunci del codice;</li>
+<li>
+<code><a href="../reference/transfer_skill_profile_mixture.html">transfer_skill_profile_mixture()</a></code> assegna a ogni codice la media dei profili pesata con quei pesi, rinormalizzata sui profili usabili, e riporta la quota di peso coperta.</li>
+</ul></li>
+</ul></div>
+</div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.8.1" id="skillviz-081">skillviz 0.8.1<a class="anchor" aria-label="anchor" href="#skillviz-081"></a></h2>
 <div class="section level3">
 <h3 id="correzioni-0-8-1">Correzioni<a class="anchor" aria-label="anchor" href="#correzioni-0-8-1"></a></h3>

@@ -205,30 +205,30 @@ tr <- extract_trend(d, "source", "week", "n", max_harmonics = 2L)
 head(tr)
 #>    source       week observed   seasonal    trend trend_filtered     trend_se
 #>    <char>     <IDat>    <num>      <num>    <num>          <num>        <num>
-#> 1:      a 2023-05-01 5.160749 0.18052901 4.987748       4.980220 0.0005321449
-#> 2:      a 2023-05-08 5.175483 0.16846275 4.991509       4.998719 0.0007806714
-#> 3:      a 2023-05-15 5.132962 0.15395669 4.995264       4.990626 0.0010148063
-#> 4:      a 2023-05-22 5.191788 0.13722092 4.999014       5.021606 0.0012354536
-#> 5:      a 2023-05-29 5.137803 0.11849781 5.002755       5.025654 0.0014431679
-#> 6:      a 2023-06-05 5.085656 0.09805853 5.006486       5.017144 0.0016384141
+#> 1:      a 2023-05-01 5.160749 0.17720298 4.990724       4.983546 0.0004710305
+#> 2:      a 2023-05-08 5.175483 0.16564283 4.994312       5.001696 0.0006922510
+#> 3:      a 2023-05-15 5.132962 0.15179321 4.997896       4.993102 0.0009017094
+#> 4:      a 2023-05-22 5.191788 0.13582556 5.001475       5.023468 0.0011001138
+#> 5:      a 2023-05-29 5.137803 0.11793733 5.005050       5.026820 0.0012878873
+#> 6:      a 2023-06-05 5.085656 0.09835113 5.008619       5.017563 0.0014653791
 #>    trend_lo trend_hi    remainder imputed method
 #>       <num>    <num>        <num>  <lgcl> <char>
-#> 1: 4.986705 4.988791 -0.007528103   FALSE    llt
-#> 2: 4.989979 4.993039  0.015512077   FALSE    llt
-#> 3: 4.993275 4.997253 -0.016258832   FALSE    llt
-#> 4: 4.996592 5.001435  0.055553578   FALSE    llt
-#> 5: 4.999926 5.005583  0.016550398   FALSE    llt
-#> 6: 5.003275 5.009697 -0.018888580   FALSE    llt
+#> 1: 4.989801 4.991648 -0.007178578   FALSE    llt
+#> 2: 4.992955 4.995668  0.015529073   FALSE    llt
+#> 3: 4.996128 4.999663 -0.016726495   FALSE    llt
+#> 4: 4.999319 5.003632  0.054487209   FALSE    llt
+#> 5: 5.002526 5.007574  0.014815579   FALSE    llt
+#> 6: 5.005746 5.011491 -0.021313496   FALSE    llt
 attr(tr, "fits")
-#>    source method     K      aicc var_level    var_slope      var_obs
-#>    <char> <char> <int>     <num>     <num>        <num>        <num>
-#> 1:      a    llt     1 -648.7773         0 6.098825e-09 0.0007024439
-#>    convergence zero_variance fixed_variance boundary retried    start
-#>          <int>        <char>         <char>   <lgcl>  <lgcl>   <char>
-#> 1:           0         level                    TRUE   FALSE rescaled
-#>    degenerate interpolated n_obs  n_na  error
-#>        <lgcl>       <lgcl> <int> <int> <char>
-#> 1:      FALSE        FALSE   156     0   <NA>
+#>    source method     K      aicc var_level    var_slope     var_obs convergence
+#>    <char> <char> <int>     <num>     <num>        <num>       <num>       <int>
+#> 1:      a    llt     2 -647.5769         0 4.368182e-09 0.000695082           0
+#>    zero_variance fixed_variance boundary retried    start degenerate
+#>           <char>         <char>   <lgcl>  <lgcl>   <char>     <lgcl>
+#> 1:         level                    TRUE   FALSE rescaled      FALSE
+#>    interpolated n_obs  n_na  error
+#>          <lgcl> <int> <int> <char>
+#> 1:        FALSE   156     0   <NA>
 # smooth trend model: level variance fixed at 0
 ts_ <- extract_trend(d, "source", "week", "n", method = "smooth",
   harmonics = 1L)

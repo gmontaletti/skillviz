@@ -125,6 +125,22 @@ Build crosswalk tables between CPI, ESCO, and CP2021 classifications.
   : Predict CP2021 level-5 codes via sector-boosted Jaccard k-NN
 - [`predict_cp5_centroid()`](https://gmontaletti.github.io/skillviz/reference/predict_cp5_centroid.md)
   : Predict CP2021 codes against static skill profiles
+- [`skill_idf()`](https://gmontaletti.github.io/skillviz/reference/skill_idf.md)
+  : Inverse document frequency of skills over postings
+- [`skill_profiles()`](https://gmontaletti.github.io/skillviz/reference/skill_profiles.md)
+  : Skill coverage profiles of occupation codes
+- [`build_reference_professions()`](https://gmontaletti.github.io/skillviz/reference/build_reference_professions.md)
+  : Reference professions of one classification in another
+- [`calibrate_reference_threshold()`](https://gmontaletti.github.io/skillviz/reference/calibrate_reference_threshold.md)
+  : Calibrate the frequency threshold of the reference professions
+- [`transfer_skill_profile()`](https://gmontaletti.github.io/skillviz/reference/transfer_skill_profile.md)
+  : Transfer skill profiles through reference professions
+- [`validate_profile_transfer()`](https://gmontaletti.github.io/skillviz/reference/validate_profile_transfer.md)
+  : Validate transferred skill profiles against observed ones
+- [`group_mixture_weights()`](https://gmontaletti.github.io/skillviz/reference/group_mixture_weights.md)
+  : Mixture weights from the doubly-coded postings of a parent group
+- [`transfer_skill_profile_mixture()`](https://gmontaletti.github.io/skillviz/reference/transfer_skill_profile_mixture.md)
+  : Transfer skill profiles as a weighted mixture of profiles
 
 ## Skill Relevance Analysis
 
